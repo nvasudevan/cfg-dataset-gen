@@ -4,23 +4,10 @@ use rand;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 
-use crate::cfg::{Cfg, LexSymbol, TermSymbol};
+use crate::cfg::{Cfg, LexSymbol, TermSymbol, CfgError};
 use std::io::Write;
 
 const MAX_ITER_LIMIT: usize = 500;
-
-#[derive(Debug)]
-pub(crate) struct CfgMutateError {
-    msg: String,
-}
-
-impl CfgMutateError {
-    fn new(msg: String) -> Self {
-        CfgMutateError {
-            msg
-        }
-    }
-}
 
 pub(crate) struct CfgMutation<'a> {
     cfg: &'a Cfg,
@@ -73,6 +60,7 @@ impl<'a> CfgMutation<'a> {
         self.non_terms = keys;
     }
 
+    /// Extract terminals and rules containing terminals and their locations.
     pub(crate) fn instantiate(&mut self) {
         self.terminal_indices();
         self.nt_alt_with_terminals();
@@ -100,19 +88,18 @@ impl<'a> CfgMutation<'a> {
         let j = alt_indices.choose(&mut thread_rng()).unwrap();
         let terminal_indices = &alt_with_terms[*j];
         let terminal_i = terminal_indices.choose(&mut thread_rng()).unwrap();
-        // println!("{}: alt_with_terms: {:?}, j: {}, term_i: {}", nt, alt_with_terms, j, terminal_i);
 
         (*j, *terminal_i)
     }
 
     /// Mutates the give alternative using the base set of terminals `terms`
-    fn mutate(&mut self) -> Result<Cfg, CfgMutateError> {
+    fn mutate(&mut self) -> Result<Cfg, CfgError> {
         let nt = self.non_terms.choose(&mut thread_rng()).unwrap();
         let (alt_i, term_j) = self.alt_with_terminals(&nt);
         let mut cfg = self.cfg.clone();
         let alt = cfg.get_alt_mut(nt, alt_i)
             .ok_or_else(||
-                CfgMutateError::new(
+                CfgError::new(
                     format!("Failed to get alternative for non-terminal {} (index: {})",
                             nt,
                             alt_i
@@ -120,7 +107,7 @@ impl<'a> CfgMutation<'a> {
                 ))?;
         let mut_sym = &alt.lex_symbols[term_j];
         let term_exclude = LexSymbol::to_term(mut_sym)
-            .ok_or_else(|| CfgMutateError::new(
+            .ok_or_else(|| CfgError::new(
                 format!("Unable to convert LexSymbol {} to TermSymbol", mut_sym)
             ))?;
 
@@ -136,9 +123,15 @@ impl<'a> CfgMutation<'a> {
     }
 }
 
+/// Generate random CFGs based on `cfg`.
+/// The number of mutations possible is dependent on the terminals in `cfg`.
 /// Start a mutation run until we generate the `cnt` mutated grammars
 /// or hit the `MAX_ITER_LIMIT` threshold.
-pub(crate) fn run(cfg_mut: &mut CfgMutation, cnt: usize) -> Result<Vec<Cfg>, CfgMutateError> {
+pub(crate) fn generate(cfg: &Cfg) -> Result<Vec<Cfg>, CfgError> {
+    let mut cfg_mut = CfgMutation::new(&cfg);
+    cfg_mut.instantiate();
+    let cnt = cfg_mut.mut_cnt() * (cfg_mut.terms.len() - 1);
+
     let mut mutated_cfgs: Vec<Cfg> = vec![];
     let mut i: usize = 0;
     loop {
@@ -148,6 +141,9 @@ pub(crate) fn run(cfg_mut: &mut CfgMutation, cnt: usize) -> Result<Vec<Cfg>, Cfg
             eprint!(".");
         } else {
             eprint!("X");
+        }
+        if i % 100 == 0 {
+            println!();
         }
         std::io::stdout().flush().unwrap();
 

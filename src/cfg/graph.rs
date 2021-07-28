@@ -537,7 +537,7 @@ impl CfgGraph {
         Ok(())
     }
 
-    /// Instantiate the graph from the root nodes: `[:.root]`, `[:root.]`
+    /// Instantiate the graph;l start from the root nodes: `[:.root]`, `[:root.]`
     pub(crate) fn instantiate(&self) -> Result<GraphResult, CfgToGraphError> {
         let mut g_result = GraphResult::new();
         let root_item = vec![LexSymbol::NonTerm(NonTermSymbol::new("root".to_owned()))];

@@ -8,7 +8,7 @@ fn main() {
     let data_dir = Path::new(ds_dir);
     let cfg_prefix = "CFG";
     match cfg_dataset_as_zip(&gp, &data_dir, cfg_prefix) {
-        Ok(_) => { println!("cfg dataset built!") }
+        Ok(_) => {}
         Err(e) => {
             eprintln!("error: {}", e);
         }

@@ -312,3 +312,23 @@ impl Cfg {
         None
     }
 }
+
+#[derive(Debug)]
+pub struct CfgError {
+    msg: String,
+}
+
+impl CfgError {
+    pub(crate) fn new(msg: String) -> Self {
+        CfgError {
+            msg
+        }
+    }
+}
+
+impl fmt::Display for CfgError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
