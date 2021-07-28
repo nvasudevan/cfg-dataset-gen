@@ -1,23 +1,10 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::cfg::{Cfg, CfgRule, EpsilonSymbol, LexSymbol, NonTermSymbol, RuleAlt, TermSymbol};
+use crate::cfg::{Cfg, CfgRule, EpsilonSymbol, LexSymbol, NonTermSymbol, RuleAlt, TermSymbol, CfgError};
 use std::fs;
 
 const RULE_END_MARKER: char = ';';
-
-#[derive(Debug)]
-pub(crate) struct CfgParseError {
-    pub(crate) msg: String,
-}
-
-impl CfgParseError {
-    fn new(msg: String) -> Self {
-        CfgParseError {
-            msg
-        }
-    }
-}
 
 pub(crate) struct CfgParser {
     tokens: Vec<char>,
@@ -78,7 +65,7 @@ impl CfgParser {
     /// - %define - marks the definition part
     /// - %start - marks the start rule part
     /// - %% - has two of these, marks the begin and end of rules section.
-    fn header_directives(&mut self, i: usize) -> Result<usize, CfgParseError> {
+    fn header_directives(&mut self, i: usize) -> Result<usize, CfgError> {
         lazy_static! {
             static ref RE_HEADER: Regex = Regex::new(
             r"[\n\r\s]*%[a-zA-Z]+\s+([a-zA-Z\.]+)\s+([a-zA-Z\-]+)[\n\r\s]+%[a-zA-Z]+\s+(?P<start>[a-zA-Z]+)[\n\r\s]+%%"
@@ -88,27 +75,27 @@ impl CfgParser {
         let mut j = i;
         while j < s_chars.len() {
             let c = s_chars.get(j)
-                .ok_or_else(|| CfgParseError::new("Unable to read tokens from input".to_owned()))?;
+                .ok_or_else(|| CfgError::new("Unable to read tokens from input".to_owned()))?;
             if *c == '%' {
                 // is the next char '%' too?
                 let c_next = s_chars.get(j + 1)
                     .ok_or_else(||
-                        CfgParseError::new("Error whilst parsing the header directives at the start of grammar!".to_owned())
+                        CfgError::new("Error whilst parsing the header directives at the start of grammar!".to_owned())
                     )?;
                 if *c_next == '%' {
                     // j+2 -- so we read until %%
                     let s: String = s_chars.get(i..j + 2)
                         .ok_or_else(||
-                            CfgParseError::new(
+                            CfgError::new(
                                 format!("Error whilst reading input between {} and {}", i, j+2)))?
                         .iter()
                         .collect();
                     let cap = RE_HEADER.captures(&s)
-                        .ok_or_else(|| CfgParseError::new(
+                        .ok_or_else(|| CfgError::new(
                             format!("Capture failed for REGEX 'RE_HEADER' for {}", s)
                         ))?;
                     let start_sym: &str = cap.name("start")
-                        .ok_or_else(|| CfgParseError::new(
+                        .ok_or_else(|| CfgError::new(
                             format!("Unable to extract 'start' directive from header")))?
                         .as_str();
                     self.add_start_symbol(start_sym.to_owned());
@@ -122,18 +109,18 @@ impl CfgParser {
     }
 
     /// Parses the footer `%%` section, thus marking the end of parsing
-    fn footer_tag(&self, i: usize) -> Result<(), CfgParseError> {
+    fn footer_tag(&self, i: usize) -> Result<(), CfgError> {
         lazy_static! {
             static ref RE_FOOTER: Regex = Regex::new( r"[\n\r\s]*%%")
             .expect("Unable to create RE_FOOTER regex");
         }
         let s_chars = self.tokens.as_slice();
         let peep = s_chars.get(i..)
-            .ok_or_else(|| CfgParseError::new("Failed to read char from input!".to_owned()))?;
+            .ok_or_else(|| CfgError::new("Failed to read char from input!".to_owned()))?;
         let s: String = peep.iter().collect();
         RE_FOOTER.captures(&s)
             .ok_or_else(||
-                CfgParseError::new("Failed whilst parsing the footer directive!".to_owned())
+                CfgError::new("Failed whilst parsing the footer directive!".to_owned())
             )?;
 
         Ok(())
@@ -156,13 +143,13 @@ impl CfgParser {
         None
     }
 
-    fn parse_alt(&self, s: &str) -> Result<Vec<LexSymbol>, CfgParseError> {
+    fn parse_alt(&self, s: &str) -> Result<Vec<LexSymbol>, CfgError> {
         let tokens_s: Vec<&str> = s.split_ascii_whitespace().collect();
         let mut syms: Vec<LexSymbol> = vec![];
         for tok in tokens_s {
             let sym = self.parse_lex_symbols(tok)
                 .ok_or_else(||
-                    CfgParseError::new("Token is neither terminal or non-terminal!".to_owned()))?;
+                    CfgError::new("Token is neither terminal or non-terminal!".to_owned()))?;
             syms.push(sym);
         }
 
@@ -170,7 +157,7 @@ impl CfgParser {
     }
 
     /// S: A 'b' C | 'x' | ;
-    fn rule_rhs_regex(&self, s: &str) -> Result<Vec<RuleAlt>, CfgParseError> {
+    fn rule_rhs_regex(&self, s: &str) -> Result<Vec<RuleAlt>, CfgError> {
         lazy_static! {
             static ref RE_ALT: Regex = Regex::new(r"(?P<alt>[a-zA-z'\s]+)")
             .expect("Unable to create regex for parsing rule alternatives");
@@ -185,7 +172,7 @@ impl CfgParser {
                 Some(cap) => {
                     let alt_s = cap.name("alt")
                         .ok_or_else(||
-                            CfgParseError::new("Failed to create regex capture to parse as an alternative".to_owned())
+                            CfgError::new("Failed to create regex capture to parse as an alternative".to_owned())
                         )?.as_str();
                     let alts_syms = self.parse_alt(alt_s)?;
                     alts_s.push(RuleAlt::new(alts_syms));
@@ -194,10 +181,10 @@ impl CfgParser {
                     // try empty alt
                     let empty_alt_cap = RE_EMPTY_ALT.captures(alt)
                         .ok_or_else(||
-                            CfgParseError::new("Failed to create a Regex capture to parse as an empty alternative!".to_owned()))?;
+                            CfgError::new("Failed to create a Regex capture to parse as an empty alternative!".to_owned()))?;
                     let _ = empty_alt_cap.name("empty")
                         .ok_or_else(||
-                            CfgParseError::new("Failed to generate an empty alternative!".to_owned())
+                            CfgError::new("Failed to generate an empty alternative!".to_owned())
                         )?.as_str();
                     let alt_syms: Vec<LexSymbol> = vec![LexSymbol::Epsilon(EpsilonSymbol::new())];
                     alts_s.push(RuleAlt::new(alt_syms));
@@ -209,21 +196,19 @@ impl CfgParser {
     }
 
     /// Parse the given string `s` as a rule, returns lhs and rhs of the rule.
-    fn rule_regex<'a>(&self, s: &'a str) -> Result<(&'a str, &'a str), CfgParseError> {
-        // let re = Regex::new(r"(?m)(^[a-zA-Z]+):([a-zA-Z'|\s]+)(;$)")
-        //     .expect("Unable to create regex");(?P<end>[\n\r\s]*;[\n\r\s]*)
+    fn rule_regex<'a>(&self, s: &'a str) -> Result<(&'a str, &'a str), CfgError> {
         lazy_static! {
              static ref RE_RULE: Regex = Regex::new(r"[\n\r\s]+(?P<lhs>[a-zA-Z]+)[\s]*:(?P<rhs>[a-zA-z'|\s]+)[\s]*;")
             .expect("Unable to create regex");
     }
         let cap = RE_RULE.captures(s)
-            .ok_or_else(|| CfgParseError::new("Failed to capture rule!".to_owned())
+            .ok_or_else(|| CfgError::new("Failed to capture rule!".to_owned())
             )?;
         let lhs = cap.name("lhs")
-            .ok_or_else(|| CfgParseError::new("Unable to capture LHS of a rule using regex".to_owned()))?
+            .ok_or_else(|| CfgError::new("Unable to capture LHS of a rule using regex".to_owned()))?
             .as_str();
         let rhs = cap.name("rhs")
-            .ok_or_else(|| CfgParseError::new("Unable to catpure RHS of a rule using regex".to_owned()))?
+            .ok_or_else(|| CfgError::new("Unable to catpure RHS of a rule using regex".to_owned()))?
             .as_str();
 
         Ok((lhs, rhs))
@@ -232,13 +217,13 @@ impl CfgParser {
     /// Create a rule
     /// From `i`, tries the rule end marker `;`, if found, returns the rule.
     /// Otherwise, returns `i`.
-    fn rule(&self, i: usize) -> Result<(usize, CfgRule), CfgParseError> {
+    fn rule(&self, i: usize) -> Result<(usize, CfgRule), CfgError> {
         let s_chars = self.tokens.as_slice();
         let j = self.rule_end_marker(i)
-            .ok_or_else(|| CfgParseError::new("Unable to find rule end marker".to_owned()))?;
+            .ok_or_else(|| CfgError::new("Unable to find rule end marker".to_owned()))?;
         let rule = s_chars.get(i..j + 1)
             .ok_or_else(||
-                CfgParseError::new("Failed to read from input!".to_owned())
+                CfgError::new("Failed to read from input!".to_owned())
             )?;
         let rule_s: String = rule.iter().collect();
         let (lhs, rhs) = self.rule_regex(&rule_s)?;
@@ -250,7 +235,7 @@ impl CfgParser {
 
     /// Parses the rules section between the `%%` markers
     /// First read the root rule and then parse the rest of the rules
-    fn parse_rules(&mut self, i: usize) -> Result<(usize, Vec<CfgRule>), CfgParseError> {
+    fn parse_rules(&mut self, i: usize) -> Result<(usize, Vec<CfgRule>), CfgError> {
         let s_chars = self.tokens.as_slice();
         let mut j = i;
         let mut rules: Vec<CfgRule> = vec![];
@@ -274,7 +259,7 @@ impl CfgParser {
         Ok((j+1, rules))
     }
 
-    fn run(&mut self) -> Result<Cfg, CfgParseError> {
+    fn run(&mut self) -> Result<Cfg, CfgError> {
         let i = self.header_directives(0)?;
         let (j, rules) = self.parse_rules(i)?;
         self.footer_tag(j)?;
@@ -283,9 +268,9 @@ impl CfgParser {
     }
 }
 
-pub(crate) fn parse(cfgp: &str) -> Result<Cfg, CfgParseError> {
+pub(crate) fn parse(cfgp: &str) -> Result<Cfg, CfgError> {
     let s = fs::read_to_string(cfgp)
-        .map_err(|x| CfgParseError::new(x.to_string()))?;
+        .map_err(|x| CfgError::new(x.to_string()))?;
     let s_chars: Vec<char> = s.chars().into_iter().collect();
     let mut parser = CfgParser::new(s_chars);
     let cfg = parser.run()?;

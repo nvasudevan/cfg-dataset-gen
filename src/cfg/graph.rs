@@ -3,21 +3,8 @@ use std::{
     rc::Rc,
 };
 
-use crate::cfg::{Cfg, EpsilonSymbol, LexSymbol, NonTermSymbol};
+use crate::cfg::{Cfg, EpsilonSymbol, LexSymbol, NonTermSymbol, CfgError};
 use std::collections::HashMap;
-
-#[derive(Debug)]
-pub(crate) struct CfgToGraphError {
-    msg: String
-}
-
-impl CfgToGraphError {
-    fn new(msg: String) -> Self {
-        CfgToGraphError {
-            msg
-        }
-    }
-}
 
 /// Represents a Cfg graph node/vertex
 #[derive(Debug, Clone)]
@@ -352,12 +339,12 @@ impl GraphResult {
     }
 
     /// Add cycle derivations from `cyclic_links`
-    fn add_cycle_derivations(&mut self) -> Result<(), CfgToGraphError> {
+    fn add_cycle_derivations(&mut self) -> Result<(), CfgError> {
         let mut cycle_edges = Vec::<Rc<Edge>>::new();
         for link in &self.cyclic_links {
             let edges = self.node_edge_map.get(&link.parent.node_id)
                 .ok_or_else(||
-                    CfgToGraphError::new(format!("Unable to find parent: {}", &link.parent))
+                    CfgError::new(format!("Unable to find parent: {}", &link.parent))
                 )?;
             let nodes: Vec<Rc<Node>> = edges.out_edges
                 .iter()
@@ -437,10 +424,10 @@ impl CfgGraph {
     ///  - [Y: . r] -->[r] [Y: r .] -- shifting terminal `r`
     ///  - [Y: r .] -->[<eps>] [X; P q Y .] -- reduction
     fn build_graph(&self, nt: &str, parent: &Rc<Node>, mut g_result: &mut GraphResult)
-        -> Result<(), CfgToGraphError> {
+        -> Result<(), CfgError> {
         let rule = self.cfg.get_rule(nt)
             .ok_or_else(||
-                CfgToGraphError::new(format!("Unable to get rule for non-terminal {}", nt))
+                CfgError::new(format!("Unable to get rule for non-terminal {}", nt))
             )?;
         let mut reduce_nodes: Vec<Rc<Node>> = vec![];
         for alt in &rule.rhs {
@@ -538,7 +525,7 @@ impl CfgGraph {
     }
 
     /// Instantiate the graph;l start from the root nodes: `[:.root]`, `[:root.]`
-    pub(crate) fn instantiate(&self) -> Result<GraphResult, CfgToGraphError> {
+    pub(crate) fn instantiate(&self) -> Result<GraphResult, CfgError> {
         let mut g_result = GraphResult::new();
         let root_item = vec![LexSymbol::NonTerm(NonTermSymbol::new("root".to_owned()))];
         let root_s_node = Node::new(

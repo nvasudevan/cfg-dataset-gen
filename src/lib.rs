@@ -35,8 +35,7 @@ fn prepare_zip_file(zip_p: &Path, cfg_prefix: &str)
 /// Generate dataset based on `gf` and write it to a zip file.
 pub fn cfg_dataset_as_zip(gf: &str, data_dir: &Path, cfg_prefix: &str)
     -> Result<(), CfgError> {
-    let cfg = parse::parse(gf)
-        .map_err(|e| CfgError::new(e.msg))?;
+    let cfg = parse::parse(gf)?;
     let cfgs = generate(&cfg)?;
 
     println!("\n=> generated {} cfgs, creating dataset ...", cfgs.len());
