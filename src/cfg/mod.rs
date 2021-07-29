@@ -264,6 +264,12 @@ impl Cfg {
         }
     }
 
+    /// Generate grammar in ACCENT format
+    pub(crate) fn as_acc(&self) -> String {
+        format!("%nodefault\n\n{}", self)
+    }
+
+    /// Generate grammar in YACC format
     pub(crate) fn as_yacc(&self) -> String {
         let start_rule = self.get_rule("root")
             .expect("No start rule found!");

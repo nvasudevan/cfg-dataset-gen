@@ -19,6 +19,7 @@ regex = "1.5.4"
 lazy_static = "1.4.0"
 rand = "0.8.4"
 zip = "0.5.13"
+tempdir = "0.3.7"
 cfgz = { git = "https://github.com/nvasudevan/cfgz", branch = "main"}
 
 [dependencies.pyo3]

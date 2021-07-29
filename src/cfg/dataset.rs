@@ -1,10 +1,11 @@
-use crate::cfg::{Cfg, CfgError};
-use crate::cfg::graph::{GraphResult, CfgGraph};
-use std::path::Path;
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
+use std::path::Path;
+
 use cfgz::lr1_check;
 
+use crate::cfg::{Cfg, CfgError};
+use crate::cfg::graph::{CfgGraph, GraphResult};
 
 /// Represents the ML data associated with a Cfg Graph
 pub(crate) struct CfgData {
@@ -210,8 +211,21 @@ impl CfgDataSet {
 /// Calculate the `label` for the given grammar, label:
 /// 0 - unambiguous
 /// 1 - ambiguous or don't know (meaning bison reported conflicts)
-fn calc_label(gp: &Path) -> Result<usize, CfgError> {
-    let lr1 = lr1_check(gp)
+fn calc_label(cfg: &Cfg, data_dir: &Path, cfg_name: &str) -> Result<usize, CfgError> {
+    let cfg_acc = data_dir.join(format!("{}.acc", cfg_name));
+    std::fs::write(&cfg_acc, cfg.as_acc())
+        .map_err(|e| CfgError::new(
+            format!("Error occurred whilst writing cfg in ACCENT format:\n{}",
+                    e.to_string())
+        ))?;
+
+    let cfg_yacc = data_dir.join(format!("{}.y", cfg_name));
+    std::fs::write(&cfg_yacc, cfg.as_yacc())
+        .map_err(|e| CfgError::new(
+            format!("Error occurred whilst writing cfg in YACC format:\n{}",
+                    e.to_string())
+        ))?;
+    let lr1 = lr1_check(cfg_yacc.as_path())
         .map_err(|e|
             CfgError::new(format!("Error: {}", e.to_string()))
         )?;
@@ -230,13 +244,7 @@ pub(crate) fn build_dataset(cfgs: &Vec<Cfg>, data_dir: &Path) -> Result<CfgDataS
         let g_result = g.instantiate()
             .expect("Unable to convert cfg to graph");
 
-        let cfgp = data_dir.join(format!("{}.y", i.to_string()));
-        std::fs::write(&cfgp, cfg.as_yacc())
-            .map_err(|e| CfgError::new(
-                format!("Error occurred whilst writing cfg.\n\nError: {}",
-                        e.to_string())
-            ))?;
-        let label: usize = calc_label(cfgp.as_path())?;
+        let label: usize = calc_label(&cfg, &data_dir, i.to_string().as_str())?;
 
         cfg_data.push(CfgData::new(i, g_result, label));
     }
@@ -250,10 +258,13 @@ pub(crate) fn build_dataset(cfgs: &Vec<Cfg>, data_dir: &Path) -> Result<CfgDataS
 
 #[cfg(test)]
 mod tests {
-    use crate::cfg::parse;
-    use crate::cfg::dataset::{generate, build_dataset};
-    use std::path::Path;
+    extern crate tempdir;
+
+    use tempdir::TempDir;
+
+    use crate::cfg::dataset::build_dataset;
     use crate::cfg::mutate::generate;
+    use crate::cfg::parse;
 
     #[test]
     fn test_ds_generate() {
@@ -261,8 +272,12 @@ mod tests {
             .expect("Unable to parse as a cfg");
         let cfgs = generate(&cfg)
             .expect("Unable to generate mutated CFGs");
-        let data_dir = Path::new("/var/tmp/cfg_ds");
-        let _ = build_dataset(&cfgs, &data_dir)
+        let data_dir = TempDir::new("cfg-ds")
+            .expect("Unable to create temp dir");
+        let _ = build_dataset(&cfgs, data_dir.path())
             .expect("Unable to build dataset from cfgs");
+
+        data_dir.close()
+            .expect("Unable to close the data directory");
     }
 }

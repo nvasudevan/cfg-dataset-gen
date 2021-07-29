@@ -555,9 +555,9 @@ impl CfgGraph {
 
 #[cfg(test)]
 mod tests {
-    use crate::cfg::graph::{graph, EdgeType, CfgGraph, GraphResult, Node};
+    use crate::cfg::graph::{EdgeType, CfgGraph, GraphResult, Node};
     use crate::cfg::{LexSymbol, EpsilonSymbol, parse};
-    use crate::cfg::parse::CfgParseError;
+    use crate::cfg::CfgError;
     use std::rc::Rc;
 
     pub(crate) fn get_node_by_id(g_result: &GraphResult, node_id: usize) -> Option<&Rc<Node>> {
@@ -570,7 +570,7 @@ mod tests {
         None
     }
 
-    fn graph(cfgp: &str) -> Result<CfgGraph, CfgParseError> {
+    fn graph(cfgp: &str) -> Result<CfgGraph, CfgError> {
         let cfg = parse::parse(cfgp)?;
         let graph = CfgGraph::new(cfg);
 
@@ -579,11 +579,11 @@ mod tests {
 
     fn print_graph(g_result: &GraphResult) {
         println!("\n=> nodes:\n");
-        for n in g_result.nodes {
+        for n in &g_result.nodes {
             println!("{}", n);
         }
         println!("\n=> edges:\n");
-        for e in g_result.edges {
+        for e in &g_result.edges {
             println!("{}", e);
         }
         println!("\n=> node in/out edges:\n");

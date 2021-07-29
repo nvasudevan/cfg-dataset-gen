@@ -1,11 +1,11 @@
 use std::collections::HashMap;
+use std::io::Write;
 
 use rand;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 
-use crate::cfg::{Cfg, LexSymbol, TermSymbol, CfgError};
-use std::io::Write;
+use crate::cfg::{Cfg, CfgError, LexSymbol, TermSymbol};
 
 const MAX_ITER_LIMIT: usize = 500;
 
@@ -158,10 +158,13 @@ pub(crate) fn generate(cfg: &Cfg) -> Result<Vec<Cfg>, CfgError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::cfg::mutate::{run, CfgMutation};
+    extern crate tempdir;
+
+    use tempdir::TempDir;
+
+    use crate::cfg::graph::CfgGraph;
+    use crate::cfg::mutate::{CfgMutation, generate};
     use crate::cfg::parse;
-    use std::path::Path;
-    use crate::cfg::graph::graph;
 
     #[test]
     fn test_cfg_mutation() {
@@ -169,21 +172,22 @@ mod tests {
             .expect("Unable to parse as a cfg");
         let mut cfg_mut = CfgMutation::new(&cfg);
         cfg_mut.instantiate();
-        let cnt = cfg_mut.mut_cnt() * (cfg_mut.terms.len() - 1);
-        let cfgs = run(&mut cfg_mut, cnt)
+        let cfgs = generate(&cfg)
             .expect("Unable to generate a mutated cfg");
         println!("\n=> generated {} cfgs, writing ...", cfgs.len());
-        let basep = Path::new("/var/tmp/cfgtest");
+        let tempd = TempDir::new("cfg-test")
+            .expect("Unable to create temp dir");
 
         for (i, cfg) in cfgs.iter().enumerate() {
-            let cfgp = basep.join(i.to_string());
+            let cfgp = tempd.path().join(i.to_string());
             std::fs::write(&cfgp, cfg.as_yacc())
                 .expect(&format!("Failed to write cfg {}", cfg));
-            let g = graph(cfgp.to_str().unwrap())
-                .expect("Unable to create graph");
+            let g = CfgGraph::new(cfg.clone());
             let g_result = g.instantiate()
                 .expect("Unable to convert cfg to graph");
             println!("=>graph: {}", g_result);
         }
+
+        tempd.close().expect("Unable to close temp dir");
     }
 }
