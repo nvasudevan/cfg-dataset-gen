@@ -3,9 +3,14 @@ use std::fmt;
 use std::path::Path;
 
 use cfgz::lr1_check;
+use sinbad_rs::sinbad::SinBAD;
 
-use crate::cfg::{Cfg, CfgError};
+use crate::cfg::{Cfg, CfgError, parse};
 use crate::cfg::graph::{CfgGraph, GraphResult};
+use crate::cfg::mutate::CfgMutation;
+use std::io::Write;
+use rand::Rng;
+use crate::DatasetGenInput;
 
 /// Represents the ML data associated with a Cfg Graph
 pub(crate) struct CfgData {
@@ -210,16 +215,16 @@ impl CfgDataSet {
 
 /// Calculate the `label` for the given grammar, label:
 /// 0 - unambiguous
-/// 1 - ambiguous or don't know (meaning bison reported conflicts)
-fn calc_label(cfg: &Cfg, data_dir: &Path, cfg_name: &str) -> Result<usize, CfgError> {
-    let cfg_acc = data_dir.join(format!("{}.acc", cfg_name));
+/// 1 - ambiguous
+fn calc_label(cfg: &Cfg, data_dir: &Path, cfg_i: usize, sin: &SinBAD) -> Result<usize, CfgError> {
+    let cfg_acc = data_dir.join(format!("{}.acc", cfg_i));
     std::fs::write(&cfg_acc, cfg.as_acc())
         .map_err(|e| CfgError::new(
             format!("Error occurred whilst writing cfg in ACCENT format:\n{}",
                     e.to_string())
         ))?;
 
-    let cfg_yacc = data_dir.join(format!("{}.y", cfg_name));
+    let cfg_yacc = data_dir.join(format!("{}.y", cfg_i));
     std::fs::write(&cfg_yacc, cfg.as_yacc())
         .map_err(|e| CfgError::new(
             format!("Error occurred whilst writing cfg in YACC format:\n{}",
@@ -229,29 +234,67 @@ fn calc_label(cfg: &Cfg, data_dir: &Path, cfg_name: &str) -> Result<usize, CfgEr
         .map_err(|e|
             CfgError::new(format!("Error: {}", e.to_string()))
         )?;
-    match lr1 {
+
+    return match lr1 {
         true => { Ok(0) }
-        false => { Ok(1) }
-    }
+        false => {
+            let backend = "dynamic1";
+            let depth = 10;
+            let gp = cfg_acc.as_path().to_str().unwrap();
+            let lp = "/home/krish/kv/sinbad/bin/general.lex";
+            let duration: usize = 10;
+            let res = sinbad_rs::invoke(
+                &sin, duration, backend, depth, gp, lp,
+            )?;
+            match res {
+                true => { Ok(1) }
+                false => { Ok(2) }
+            }
+        }
+    };
 }
 
-/// Build dataset from the collection of CFGs `cfgs`. Save the grammars
-/// in `yacc` format to calculate label (ambiguous or otherwise).
-pub(crate) fn build_dataset(cfgs: &Vec<Cfg>, data_dir: &Path) -> Result<CfgDataSet, CfgError> {
+/// Build dataset from the given input params
+pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, CfgError> {
+    println!("\n=> generating {} cfgs ...", ds_input.no_samples);
+    let base_cfg = parse::parse(ds_input.cfg_path)?;
+    let mut cfg_mut = CfgMutation::new(&base_cfg);
+    cfg_mut.instantiate();
+    let total_mut_cnt = cfg_mut.total_mutations_cnt();
+    let mut generated_cfgs: Vec<Cfg> = vec![];
+    let mut i: usize = 0;
     let mut cfg_data: Vec<CfgData> = vec![];
-    for (i, cfg) in cfgs.iter().enumerate() {
-        let g = CfgGraph::new(cfg.clone());
-        let g_result = g.instantiate()
-            .expect("Unable to convert cfg to graph");
+    let sin = sinbad_rs::sinbad()?;
 
-        let label: usize = calc_label(&cfg, &data_dir, i.to_string().as_str())?;
+    loop {
+        let mut rnd = rand::thread_rng();
+        let no_mutations = rnd.gen_range(1..=ds_input.max_mutations_per_cfg);
+        let cfg = cfg_mut.mutate(no_mutations)?;
+        if !generated_cfgs.contains(&cfg) {
+            let g = CfgGraph::new(cfg.clone());
+            let g_result = g.instantiate()
+                .expect("Unable to convert cfg to graph");
 
-        cfg_data.push(CfgData::new(i, g_result, label));
+            let label: usize = calc_label(&cfg, &ds_input.data_dir, i, &sin)?;
+            if ds_input.allowed_labels.contains(&label) {
+                println!("{} (n:{}, e:{}) => {}", i, g_result.nodes.len(), g_result.edges.len(), label);
+                cfg_data.push(CfgData::new(i, g_result, label));
+            }
+            generated_cfgs.push(cfg);
+        }
+        i += 1;
+        if (i >= ds_input.max_iter_limit) ||
+            (cfg_data.len() >= ds_input.no_samples) ||
+            (cfg_data.len() >= total_mut_cnt) {
+            break;
+        }
+        std::io::stdout().flush().unwrap();
     }
 
     let mut ds = CfgDataSet::new(cfg_data);
     ds.build_unique_nodes_map();
     ds.build_unique_edges_map();
+    println!("unique nodes: {}, edges; {}", ds.node_ids_map.len(), ds.edge_ids_map.len());
 
     Ok(ds)
 }
@@ -270,7 +313,7 @@ mod tests {
     fn test_ds_generate() {
         let cfg = parse::parse("./grammars/lr1.y")
             .expect("Unable to parse as a cfg");
-        let cfgs = generate(&cfg)
+        let cfgs = generate(&cfg, 3)
             .expect("Unable to generate mutated CFGs");
         let data_dir = TempDir::new("cfg-ds")
             .expect("Unable to create temp dir");

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Write;
 
 use rand;
 use rand::prelude::SliceRandom;
@@ -7,21 +6,48 @@ use rand::thread_rng;
 
 use crate::cfg::{Cfg, CfgError, LexSymbol, TermSymbol};
 
-const MAX_ITER_LIMIT: usize = 500;
-
 pub(crate) struct CfgMutation<'a> {
     cfg: &'a Cfg,
     terminal_indices: HashMap<String, Vec<Vec<usize>>>,
-    non_terms: Vec<String>,
+    non_terms_with_terminals: Vec<String>,
     pub(crate) terms: Vec<&'a TermSymbol>,
 }
+
+struct TerminalPos {
+    rule_name: String,
+    alt_i: usize,
+    term_j: usize
+}
+
+impl TerminalPos {
+    fn new(rule_name: String, alt_i: usize, term_j: usize) -> Self {
+        Self {
+            rule_name,
+            alt_i,
+            term_j
+        }
+    }
+}
+
+impl PartialEq for TerminalPos {
+    fn eq(&self, other: &Self) -> bool {
+        if self.rule_name.eq(&other.rule_name) ||
+            (self.alt_i == other.alt_i) ||
+            (self.term_j == other.term_j) {
+            return true;
+        }
+
+        false
+    }
+}
+
 
 impl<'a> CfgMutation<'a> {
     pub(crate) fn new(cfg: &'a Cfg) -> Self {
         Self {
             cfg,
             terminal_indices: Default::default(),
-            non_terms: vec![],
+            non_terms_with_terminals: vec![],
             terms: vec![],
         }
     }
@@ -57,7 +83,7 @@ impl<'a> CfgMutation<'a> {
                 }
             }
         }
-        self.non_terms = keys;
+        self.non_terms_with_terminals = keys;
     }
 
     /// Extract terminals and rules containing terminals and their locations.
@@ -68,12 +94,38 @@ impl<'a> CfgMutation<'a> {
     }
 
     /// Returns the number of possible mutations where terminals occur
-    pub(crate) fn mut_cnt(&self) -> usize {
+    fn term_pos_cnt(&self) -> usize {
         self.terminal_indices.values()
             .map(|u|
                 u.iter().map(|v| v.len()).sum::<usize>()
             )
             .sum::<usize>()
+    }
+
+    /// No of single mutations possible:
+    /// number of terminal positions X (number of terminals - 1)
+    /// (we exclude the current terminal)
+    fn single_mutation_cnt(&self) -> usize {
+        self.term_pos_cnt() * (self.terms.len() - 1)
+    }
+
+    /// No of double mutations possible: nC2
+    /// where n is the number of terminal positions and
+    /// for each position there are (number of terminals - 1) options
+    fn double_mutation_cnt(&self) -> usize {
+        let term_cnt = self.term_pos_cnt();
+        ((term_cnt * (term_cnt - 1))/2) *
+            (self.terms.len() - 1) *
+            (self.terms.len() - 1)
+    }
+
+    pub(crate) fn total_mutations_cnt(&self) -> usize {
+        let single_cnt = self.single_mutation_cnt();
+        let double_cnt = self.double_mutation_cnt();
+        let cnt = single_cnt + double_cnt;
+        println!("=> total mutations: {} ({}, {})", cnt, single_cnt, double_cnt);
+
+        cnt
     }
 
     /// Returns a tuple of indices of terminal location
@@ -92,69 +144,85 @@ impl<'a> CfgMutation<'a> {
         (*j, *terminal_i)
     }
 
-    /// Mutates the give alternative using the base set of terminals `terms`
-    fn mutate(&mut self) -> Result<Cfg, CfgError> {
-        let nt = self.non_terms.choose(&mut thread_rng()).unwrap();
-        let (alt_i, term_j) = self.alt_with_terminals(&nt);
+    /// Create a new cfg from current with `n` mutations
+    /// Mutation involves:
+    /// - pick a random rule, and a random alternative containing terminals
+    /// - from chosen alternative, replace a randomly picked terminal with another one
+    pub(crate) fn mutate(&mut self, n: usize) -> Result<Cfg, CfgError> {
+        // println!("=> no of mutations: {}", n);
+        let mut term_positions: Vec<TerminalPos> = vec![];
         let mut cfg = self.cfg.clone();
-        let alt = cfg.get_alt_mut(nt, alt_i)
-            .ok_or_else(||
-                CfgError::new(
-                    format!("Failed to get alternative for non-terminal {} (index: {})",
-                            nt,
-                            alt_i
-                    )
-                ))?;
-        let mut_sym = &alt.lex_symbols[term_j];
-        let term_exclude = LexSymbol::to_term(mut_sym)
-            .ok_or_else(|| CfgError::new(
-                format!("Unable to convert LexSymbol {} to TermSymbol", mut_sym)
-            ))?;
+        loop {
+            let nt = self.non_terms_with_terminals.choose(&mut thread_rng()).unwrap();
+            let (alt_i, term_j) = self.alt_with_terminals(&nt);
+            // println!("nt: {}, alt_i: {}, term_j: {}", nt, alt_i, term_j);
+            let term_pos = TerminalPos::new(nt.to_owned(), alt_i, term_j);
+            if ! term_positions.contains(&term_pos) {
+                let alt = cfg.get_alt_mut(nt, alt_i)
+                    .ok_or_else(||
+                        CfgError::new(
+                            format!("Failed to get alternative for non-terminal {} (index: {})",
+                                    nt,
+                                    alt_i
+                            )
+                        ))?;
+                let mut_sym = &alt.lex_symbols[term_j];
+                let term_exclude = LexSymbol::to_term(mut_sym)
+                    .ok_or_else(|| CfgError::new(
+                        format!("Unable to convert LexSymbol {} to TermSymbol", mut_sym)
+                    ))?;
 
-        let new_terms: Vec<&TermSymbol> = self.terms
-            .iter()
-            .filter(|t| (**t).ne(term_exclude))
-            .map(|t| *t)
-            .collect();
-        let new_term = new_terms.choose(&mut thread_rng()).unwrap();
-        alt.lex_symbols[term_j] = LexSymbol::Term((*new_term).clone());
+                let new_terms: Vec<&TermSymbol> = self.terms
+                    .iter()
+                    .filter(|t| (**t).ne(term_exclude))
+                    .map(|t| *t)
+                    .collect();
+                let new_term = new_terms.choose(&mut thread_rng()).unwrap();
+                alt.lex_symbols[term_j] = LexSymbol::Term((*new_term).clone());
+                term_positions.push(term_pos);
+            }
+            if term_positions.len() >= n {
+                break
+            }
+        }
 
         Ok(cfg)
     }
 }
 
-/// Generate random CFGs based on `cfg`.
-/// The number of mutations possible is dependent on the terminals in `cfg`.
-/// Start a mutation run until we generate the `cnt` mutated grammars
-/// or hit the `MAX_ITER_LIMIT` threshold.
-pub(crate) fn generate(cfg: &Cfg) -> Result<Vec<Cfg>, CfgError> {
-    let mut cfg_mut = CfgMutation::new(&cfg);
-    cfg_mut.instantiate();
-    let cnt = cfg_mut.mut_cnt() * (cfg_mut.terms.len() - 1);
-
-    let mut mutated_cfgs: Vec<Cfg> = vec![];
-    let mut i: usize = 0;
-    loop {
-        let cfg = cfg_mut.mutate()?;
-        if !mutated_cfgs.contains(&cfg) {
-            mutated_cfgs.push(cfg);
-            eprint!(".");
-        } else {
-            eprint!("X");
-        }
-        if i % 100 == 0 {
-            println!();
-        }
-        std::io::stdout().flush().unwrap();
-
-        i += 1;
-        if (i >= MAX_ITER_LIMIT) || (mutated_cfgs.len() >= cnt) {
-            break;
-        }
-    }
-
-    Ok(mutated_cfgs)
-}
+// /// Generate random CFGs based on `cfg`.
+// /// The number of mutations possible is dependent on the terminals in `cfg`.
+// /// Start a mutation run until we generate the `cnt` mutated grammars
+// /// or hit the `MAX_ITER_LIMIT` threshold.
+// pub(crate) fn generate(cfg: &Cfg, cnt: usize) -> Result<Vec<Cfg>, CfgError> {
+//     let mut cfg_mut = CfgMutation::new(&cfg);
+//     cfg_mut.instantiate();
+//     let max_cnt = cfg_mut.mut_cnt() * (cfg_mut.terms.len() - 1);
+//     println!("=> max_cnt: {}", max_cnt);
+//     let mut mutated_cfgs: Vec<Cfg> = vec![];
+//     let mut i: usize = 0;
+//     let no_mutations: usize = 1;
+//     loop {
+//         let cfg = cfg_mut.mutate(no_mutations)?;
+//         if !mutated_cfgs.contains(&cfg) {
+//             mutated_cfgs.push(cfg);
+//             eprint!(".");
+//         } else {
+//             eprint!("X");
+//         }
+//         if i % 100 == 0 {
+//             println!();
+//         }
+//         std::io::stdout().flush().unwrap();
+//
+//         i += 1;
+//         if (i >= MAX_ITER_LIMIT) || (mutated_cfgs.len() >= cnt || (cnt >= max_cnt)) {
+//             break;
+//         }
+//     }
+//
+//     Ok(mutated_cfgs)
+// }
 
 #[cfg(test)]
 mod tests {
@@ -172,7 +240,7 @@ mod tests {
             .expect("Unable to parse as a cfg");
         let mut cfg_mut = CfgMutation::new(&cfg);
         cfg_mut.instantiate();
-        let cfgs = generate(&cfg)
+        let cfgs = generate(&cfg, 3)
             .expect("Unable to generate a mutated cfg");
         println!("\n=> generated {} cfgs, writing ...", cfgs.len());
         let tempd = TempDir::new("cfg-test")

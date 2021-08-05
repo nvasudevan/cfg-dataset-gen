@@ -1,5 +1,7 @@
-use std::fmt;
 use std::convert::TryFrom;
+use std::fmt;
+
+use sinbad_rs::sinbad::SinBADError;
 
 pub(crate) mod parse;
 pub(crate) mod graph;
@@ -136,7 +138,7 @@ impl LexSymbol {
         match self {
             LexSymbol::Term(t) => {
                 Some(t)
-            },
+            }
             _ => { None }
         }
     }
@@ -147,7 +149,7 @@ impl TryFrom<LexSymbol> for TermSymbol {
 
     fn try_from(value: LexSymbol) -> Result<Self, Self::Error> {
         match value {
-            LexSymbol::Term(t) => { Ok(t) },
+            LexSymbol::Term(t) => { Ok(t) }
             _ => { Err(()) }
         }
     }
@@ -266,7 +268,7 @@ impl Cfg {
 
     /// Generate grammar in ACCENT format
     pub(crate) fn as_acc(&self) -> String {
-        format!("%nodefault\n\n{}", self)
+        format!("%nodefault\n{}", self)
     }
 
     /// Generate grammar in YACC format
@@ -286,7 +288,7 @@ impl Cfg {
             for alt in &rule.rhs {
                 for sym in &alt.lex_symbols {
                     if let LexSymbol::Term(t) = sym {
-                        if ! terms.contains(&t) {
+                        if !terms.contains(&t) {
                             terms.push(t);
                         }
                     }
@@ -335,6 +337,12 @@ impl CfgError {
 impl fmt::Display for CfgError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.msg)
+    }
+}
+
+impl From<SinBADError> for CfgError {
+    fn from(e: SinBADError) -> Self {
+        CfgError::new(e.to_string())
     }
 }
 

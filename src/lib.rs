@@ -6,24 +6,51 @@ use std::path::Path;
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
-use crate::cfg::{
-    CfgError,
-    dataset::build_dataset,
-    mutate::generate,
-    parse,
-};
+use crate::cfg::CfgError;
+use crate::cfg::dataset::build_dataset;
 
 mod cfg;
 mod py3;
 
+/// Defines input parameters for generating a dataset
+pub struct DatasetGenInput<'a, 'b, 'c> {
+    /// Path to base Cfg
+    cfg_path: &'a str,
+    data_dir: &'b Path,
+    no_samples: usize,
+    max_mutations_per_cfg: usize,
+    ds_label: String,
+    allowed_labels: &'c [usize],
+    max_iter_limit: usize,
+}
 
-fn prepare_zip_file(zip_p: &Path, cfg_prefix: &str)
-    -> Result<(ZipWriter<File>, String), CfgError> {
+impl<'a, 'b, 'c> DatasetGenInput<'a, 'b, 'c> {
+    pub fn new(cfg_path: &'a str,
+               data_dir: &'b Path,
+               no_samples: usize,
+               max_mutations_per_cfg: usize,
+               ds_label: String,
+               allowed_labels: &'c [usize],
+               max_iter_limit: usize) -> Self {
+        Self {
+            cfg_path,
+            data_dir,
+            no_samples,
+            max_mutations_per_cfg,
+            ds_label,
+            allowed_labels,
+            max_iter_limit,
+        }
+    }
+}
+
+fn prepare_zip_file(zip_p: &Path, ds_label: &str)
+                    -> Result<(ZipWriter<File>, String), CfgError> {
     let zip_f = fs::File::create(zip_p)
         .map_err(|e| CfgError::new(e.to_string()))?;
 
     let mut zip = zip::ZipWriter::new(zip_f);
-    let zip_subdir = format!("{}/", cfg_prefix);
+    let zip_subdir = format!("{}/", ds_label);
     let _ = zip.add_directory(&zip_subdir, Default::default())
         .map_err(|_| CfgError::new(
             format!("Unable to add '{}' directory to zip file", &zip_subdir)
@@ -32,18 +59,13 @@ fn prepare_zip_file(zip_p: &Path, cfg_prefix: &str)
     Ok((zip, zip_subdir))
 }
 
-/// Generate dataset based on `gf` and write it to a zip file.
-pub fn cfg_dataset_as_zip(gf: &str, data_dir: &Path, cfg_prefix: &str)
-    -> Result<(), CfgError> {
-    let cfg = parse::parse(gf)?;
-    let cfgs = generate(&cfg)?;
+/// Generate dataset based on input params `ds_input` and write to zip file.
+pub fn cfg_dataset_as_zip(ds_input: &DatasetGenInput) -> Result<(), CfgError> {
+    let ds = build_dataset(&ds_input)?;
+    let ds_files = ds.persist(&ds_input.data_dir)?;
 
-    println!("\n=> generated {} cfgs, creating dataset ...", cfgs.len());
-    let ds = build_dataset(&cfgs, &data_dir)?;
-    let ds_files = ds.persist(&data_dir)?;
-
-    let zip_p = data_dir.join(format!("{}.zip", cfg_prefix));
-    let (mut zip, zip_subdir) = prepare_zip_file(&zip_p, cfg_prefix)?;
+    let zip_p = ds_input.data_dir.join(format!("{}.zip", ds_input.ds_label));
+    let (mut zip, zip_subdir) = prepare_zip_file(&zip_p, &ds_input.ds_label)?;
     println!("=> Saving dataset to zip file: {}", zip_p.to_str().unwrap());
 
     for f in ds_files {
