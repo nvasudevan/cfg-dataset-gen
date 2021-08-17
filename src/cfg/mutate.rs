@@ -259,7 +259,7 @@ mod tests {
     use tempdir::TempDir;
 
     use crate::cfg::graph::CfgGraph;
-    use crate::cfg::mutate::{CfgMutation, generate};
+    use crate::cfg::mutate::CfgMutation;
     use crate::cfg::parse;
 
     #[test]
