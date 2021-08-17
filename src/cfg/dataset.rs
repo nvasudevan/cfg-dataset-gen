@@ -381,14 +381,14 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
 mod tests {
     extern crate tempdir;
 
-    use tempdir::TempDir;
+    
 
-    use crate::cfg::dataset::build_dataset;
+    
     use crate::cfg::parse;
 
     #[test]
     fn test_ds_generate() {
-        let cfg = parse::parse("./grammars/lr1.y")
+        let _cfg = parse::parse("./grammars/lr1.y")
             .expect("Unable to parse as a cfg");
         //let cfgs = generate(&cfg, 3)
         //    .expect("Unable to generate mutated CFGs");

@@ -256,9 +256,9 @@ impl<'a> CfgMutation<'a> {
 mod tests {
     extern crate tempdir;
 
-    use tempdir::TempDir;
+    
 
-    use crate::cfg::graph::CfgGraph;
+    
     use crate::cfg::mutate::CfgMutation;
     use crate::cfg::parse;
 
