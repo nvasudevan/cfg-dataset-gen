@@ -268,22 +268,22 @@ mod tests {
             .expect("Unable to parse as a cfg");
         let mut cfg_mut = CfgMutation::new(&cfg);
         cfg_mut.instantiate();
-        let cfgs = generate(&cfg, 3)
-            .expect("Unable to generate a mutated cfg");
-        println!("\n=> generated {} cfgs, writing ...", cfgs.len());
-        let tempd = TempDir::new("cfg-test")
-            .expect("Unable to create temp dir");
-
-        for (i, cfg) in cfgs.iter().enumerate() {
-            let cfgp = tempd.path().join(i.to_string());
-            std::fs::write(&cfgp, cfg.as_yacc())
-                .expect(&format!("Failed to write cfg {}", cfg));
-            let g = CfgGraph::new(cfg.clone());
-            let g_result = g.instantiate()
-                .expect("Unable to convert cfg to graph");
-            println!("=>graph: {}", g_result);
-        }
-
-        tempd.close().expect("Unable to close temp dir");
+        // let cfgs = generate(&cfg, 3)
+        //     .expect("Unable to generate a mutated cfg");
+        // println!("\n=> generated {} cfgs, writing ...", cfgs.len());
+        // let tempd = TempDir::new("cfg-test")
+        //     .expect("Unable to create temp dir");
+        //
+        // for (i, cfg) in cfgs.iter().enumerate() {
+        //     let cfgp = tempd.path().join(i.to_string());
+        //     std::fs::write(&cfgp, cfg.as_yacc())
+        //         .expect(&format!("Failed to write cfg {}", cfg));
+        //     let g = CfgGraph::new(cfg.clone());
+        //     let g_result = g.instantiate()
+        //         .expect("Unable to convert cfg to graph");
+        //     println!("=>graph: {}", g_result);
+        // }
+        //
+        // tempd.close().expect("Unable to close temp dir");
     }
 }
