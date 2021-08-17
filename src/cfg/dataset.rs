@@ -86,8 +86,8 @@ impl CfgDataSet {
         for cfg in &self.cfg_data {
             for node in &cfg.graph.nodes {
                 let node_s = node.min_item_string();
-                if !node_ids_map.contains_key(&node_s) {
-                    node_ids_map.insert(node_s, node_id_counter);
+                if let std::collections::hash_map::Entry::Vacant(e) = node_ids_map.entry(node_s) {
+                    e.insert(node_id_counter);
                     node_id_counter += 1;
                 }
             }
@@ -104,8 +104,8 @@ impl CfgDataSet {
         for cfg in &self.cfg_data {
             for e in &cfg.graph.edges {
                 let e_s = e.edge_label();
-                if !edge_ids_map.contains_key(&e_s) {
-                    edge_ids_map.insert(e_s, edge_id_counter);
+                if let std::collections::hash_map::Entry::Vacant(e) = edge_ids_map.entry(e_s) {
+                    e.insert(edge_id_counter);
                     edge_id_counter += 1;
                 }
             }
@@ -283,12 +283,12 @@ fn calc_label(cfg: &Cfg, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usi
         false => {
             let gp = cfg_acc.as_path().to_str().unwrap();
             let res = sinbad_rs::invoke(
-                &ds_input.sin,
+                ds_input.sin,
                 ds_input.sin_duration,
-                &ds_input.sin_backend,
+                ds_input.sin_backend,
                 ds_input.sin_depth,
                 gp,
-                &ds_input.cfg_lex,
+                ds_input.cfg_lex,
             )?;
             match res {
                 true => { Ok(1) }
@@ -333,7 +333,7 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
             }
         };
         if !generated_cfgs.contains(&cfg) {
-            let label: usize = calc_label(&cfg, i, &ds_input)?;
+            let label: usize = calc_label(&cfg, i, ds_input)?;
             // interested only in 0, 1
             match label {
                 0 => {

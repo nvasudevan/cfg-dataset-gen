@@ -96,7 +96,7 @@ impl CfgParser {
                         ))?;
                     let start_sym: &str = cap.name("start")
                         .ok_or_else(|| CfgError::new(
-                            format!("Unable to extract 'start' directive from header")))?
+                            "Unable to extract 'start' directive from header".to_string()))?
                         .as_str();
                     self.add_start_symbol(start_sym.to_owned());
                     return Ok(j + 2);

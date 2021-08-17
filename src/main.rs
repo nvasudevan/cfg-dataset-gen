@@ -15,9 +15,13 @@ fn main() {
 
     let data_dir = Path::new("/var/tmp/cfg_ds");
     std::fs::remove_dir_all(&data_dir)
-        .expect(&format!("Unable to remove data directory: {}", data_dir.to_str().unwrap()));
+        .unwrap_or_else(|_|
+            panic!("Unable to remove data directory: {}", data_dir.to_str().unwrap())
+        );
     std::fs::create_dir(&data_dir)
-        .expect(&format!("Unable to create data directory: {}", data_dir.to_str().unwrap()));
+        .unwrap_or_else(|_|
+            panic!("Unable to create data directory: {}", data_dir.to_str().unwrap())
+        );
     let ds_label = "CFG";
     let no_samples: usize = 800;
     let max_mutations_per_cfg: usize = 2;

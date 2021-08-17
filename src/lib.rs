@@ -98,11 +98,11 @@ fn prepare_zip_file(zip_p: &Path, ds_label: &str)
 
 /// Generate dataset based on input params `ds_input` and write to zip file.
 pub fn cfg_dataset_as_zip(ds_input: &DatasetGenInput) -> Result<(), CfgError> {
-    let mut ds = build_dataset(&ds_input)?;
+    let mut ds = build_dataset(ds_input)?;
     ds.build_unique_nodes_edges();
     println!("unique nodes: {}, edges; {}", ds.node_ids_map.len(), ds.edge_ids_map.len());
 
-    let ds_files = ds.persist(&ds_input.data_dir)?;
+    let ds_files = ds.persist(ds_input.data_dir)?;
 
     let zip_p = ds_input.data_dir.join(format!("{}.zip", ds_input.ds_label));
     let (mut zip, zip_subdir) = prepare_zip_file(&zip_p, &ds_input.ds_label)?;
@@ -117,7 +117,7 @@ pub fn cfg_dataset_as_zip(ds_input: &DatasetGenInput) -> Result<(), CfgError> {
         let zip_ds_p = format!("{}{}", zip_subdir, ds_p.file_name().unwrap().to_str().unwrap());
         let _ = zip.start_file(zip_ds_p, zip_file_options)
             .map_err(|_| CfgError::new(
-                format!("Unable to create file within zip")
+                "Unable to create file within zip".to_owned()
             ))?;
         zip.write_all(contents.as_bytes()).unwrap();
     }

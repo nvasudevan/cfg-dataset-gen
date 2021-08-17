@@ -27,14 +27,14 @@ impl Node {
     /// index points to the dot location, and parent_node is the node
     /// (or non-terminal) from which this node eventually derived.
     pub(crate) fn new(lhs: &str,
-                      item: &Vec<LexSymbol>,
+                      item: &[LexSymbol],
                       index: usize,
                       node_id: usize,
                       parent_node: Option<Rc<Node>>
     ) -> Self {
         Self {
             lhs: lhs.to_owned(),
-            item: item.clone(),
+            item: item.to_owned(),
             index,
             node_id,
             parent_node
@@ -314,8 +314,8 @@ impl GraphResult {
     /// Add a shift edge (`shift` - shifting of a terminal)
     fn add_shift_edge(&mut self, src: &Rc<Node>, tgt: &Rc<Node>, derived: &LexSymbol) {
         let shift_edge = Edge::new(
-            Rc::clone(&src),
-            Rc::clone(&tgt),
+            Rc::clone(src),
+            Rc::clone(tgt),
             derived.clone(),
             EdgeType::Shift);
         self.add_edge(Rc::from(shift_edge));
@@ -328,7 +328,7 @@ impl GraphResult {
             .map({
                 |src|
                     Rc::from(
-                        Edge::reduce(Rc::clone(&src), Rc::clone(&target))
+                        Edge::reduce(Rc::clone(&src), Rc::clone(target))
                     )
             })
             .collect();
@@ -404,7 +404,7 @@ impl CfgGraph {
         loop {
             match curr_ancestor {
                 Some(ancestor) => {
-                    if ancestor.eq(&node) {
+                    if ancestor.eq(node) {
                         // println!("=> [CYCLE]:: parent: {} <- node: {}", ancestor, node);
                         return Some(ancestor);
                     }
@@ -431,14 +431,14 @@ impl CfgGraph {
             )?;
         let mut reduce_nodes: Vec<Rc<Node>> = vec![];
         for alt in &rule.rhs {
-            let mut prev_node = Rc::clone(&parent);
+            let mut prev_node = Rc::clone(parent);
             for (i, sym) in alt.lex_symbols.iter().enumerate() {
                 let src_sym_node = match i {
                     0 => {
                         let src = Rc::new(
                             Node::new(
                                 &rule.lhs,
-                                &alt.lex_symbols,
+                                alt.lex_symbols.as_slice(),
                                 i,
                                 g_result.inc_node_id(),
                                 Some(Rc::clone(parent))
@@ -446,7 +446,7 @@ impl CfgGraph {
                         );
                         // create the derive edge from the parent
                         g_result.add_node(Rc::clone(&src));
-                        g_result.add_derive_edge(&parent, &src);
+                        g_result.add_derive_edge(parent, &src);
                         src
                     }
                     _ => { prev_node }
@@ -457,14 +457,14 @@ impl CfgGraph {
                         let tgt_sym_node = Rc::new(
                             Node::new(
                                 &rule.lhs,
-                                &alt.lex_symbols,
+                                alt.lex_symbols.as_slice(),
                                 i+1,
                                 g_result.inc_node_id(),
                                 Option::from(Rc::clone(parent))
                             )
                         );
                         g_result.add_node(Rc::clone(&tgt_sym_node));
-                        g_result.add_shift_edge(&src_sym_node, &tgt_sym_node, &sym);
+                        g_result.add_shift_edge(&src_sym_node, &tgt_sym_node, sym);
 
                         if i == alt.lex_symbols.len() - 1 {
                             reduce_nodes.push(Rc::clone(&tgt_sym_node));
@@ -496,7 +496,7 @@ impl CfgGraph {
                                 let tgt_sym_node = Rc::new(
                                     Node::new(
                                         &rule.lhs,
-                                        &alt.lex_symbols,
+                                        alt.lex_symbols.as_slice(),
                                         i+1,
                                         g_result.inc_node_id(),
                                         Option::from(Rc::clone(parent))
@@ -529,12 +529,12 @@ impl CfgGraph {
         let mut g_result = GraphResult::new();
         let root_item = vec![LexSymbol::NonTerm(NonTermSymbol::new("root".to_owned()))];
         let root_s_node = Node::new(
-            "", &root_item, 0, g_result.node_id(), None
+            "", root_item.as_slice(), 0, g_result.node_id(), None
         );
         let root_s = Rc::new(root_s_node);
 
         let root_e_node = Node::new(
-            "", &root_item, 1, g_result.inc_node_id(), None
+            "", root_item.as_slice(), 1, g_result.inc_node_id(), None
         );
         let root_e = Rc::new(root_e_node);
         g_result.add_node(Rc::clone(&root_s));

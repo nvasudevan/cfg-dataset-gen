@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rand;
+
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 
@@ -77,7 +77,7 @@ impl<'a> CfgMutation<'a> {
         let mut keys: Vec<String> = vec![];
         for (k, values) in &self.terminal_indices {
             for v in values {
-                if v.len() > 0 {
+                if !v.is_empty() {
                     keys.push(k.to_owned());
                     break;
                 }
@@ -93,47 +93,12 @@ impl<'a> CfgMutation<'a> {
         self.terms = self.cfg.terminals();
     }
 
-    /// Returns the number of possible mutations where terminals occur
-    fn term_pos_cnt(&self) -> usize {
-        self.terminal_indices.values()
-            .map(|u|
-                u.iter().map(|v| v.len()).sum::<usize>()
-            )
-            .sum::<usize>()
-    }
-
-    /// No of single mutations possible:
-    /// number of terminal positions X (number of terminals - 1)
-    /// (we exclude the current terminal)
-    fn single_mutation_cnt(&self) -> usize {
-        self.term_pos_cnt() * (self.terms.len() - 1)
-    }
-
-    /// No of double mutations possible: nC2
-    /// where n is the number of terminal positions and
-    /// for each position there are (number of terminals - 1) options
-    fn double_mutation_cnt(&self) -> usize {
-        let term_cnt = self.term_pos_cnt();
-        ((term_cnt * (term_cnt - 1)) / 2) *
-            (self.terms.len() - 1) *
-            (self.terms.len() - 1)
-    }
-
-    pub(crate) fn total_mutations_cnt(&self) -> usize {
-        let single_cnt = self.single_mutation_cnt();
-        let double_cnt = self.double_mutation_cnt();
-        let cnt = single_cnt + double_cnt;
-        println!("=> total mutations: {} ({}, {})", cnt, single_cnt, double_cnt);
-
-        cnt
-    }
-
     /// Returns a tuple of indices of terminal location
     fn alt_with_terminals(&self, nt: &str) -> (usize, usize) {
         let alt_with_terms = self.terminal_indices.get(nt).unwrap();
         let mut alt_indices: Vec<usize> = vec![];
         for (i, v) in alt_with_terms.iter().enumerate() {
-            if v.len() > 0 {
+            if !v.is_empty() {
                 alt_indices.push(i);
             }
         }
@@ -179,7 +144,7 @@ impl<'a> CfgMutation<'a> {
         let mut cfg = self.cfg.clone();
         loop {
             let nt = self.non_terms_with_terminals.choose(&mut thread_rng()).unwrap();
-            let (alt_i, term_j) = self.alt_with_terminals(&nt);
+            let (alt_i, term_j) = self.alt_with_terminals(nt);
             // println!("nt: {}, alt_i: {}, term_j: {}", nt, alt_i, term_j);
             let term_pos = TerminalPos::new(nt.to_owned(), alt_i, term_j);
             if !term_positions.contains(&term_pos) {
@@ -213,7 +178,7 @@ impl<'a> CfgMutation<'a> {
         let mut cfg = self.cfg.clone();
         loop {
             let nt = self.non_terms_with_terminals.choose(&mut thread_rng()).unwrap();
-            let (alt_i, term_j) = self.alt_with_terminals(&nt);
+            let (alt_i, term_j) = self.alt_with_terminals(nt);
             // println!("nt: {}, alt_i: {}, term_j: {}", nt, alt_i, term_j);
             let term_pos = TerminalPos::new(nt.to_owned(), alt_i, term_j);
             if !term_positions.contains(&term_pos) {
@@ -233,8 +198,7 @@ impl<'a> CfgMutation<'a> {
 
                 let new_terms: Vec<&TermSymbol> = self.terms
                     .iter()
-                    .filter(|t| (**t).ne(term_exclude))
-                    .map(|t| *t)
+                    .filter(|t| (**t).ne(term_exclude)).copied()
                     .collect();
                 let new_term = new_terms.choose(&mut thread_rng()).unwrap();
                 alt.lex_symbols[term_j] = LexSymbol::Term((*new_term).clone());

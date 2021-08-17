@@ -1,8 +1,9 @@
+cargo-features = ["edition2021"]
 [package]
 name = "cfg_dataset_gen"
 version = "0.1.0"
 authors = ["Naveneetha Vasudevan <naveneetha@yahoo.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 name = "cfg_dataset_gen"
