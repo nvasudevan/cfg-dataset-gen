@@ -8,38 +8,75 @@ use zip::ZipWriter;
 
 use crate::cfg::CfgError;
 use crate::cfg::dataset::build_dataset;
+use sinbad_rs::sinbad::SinBAD;
 
 mod cfg;
 mod py3;
 
-/// Defines input parameters for generating a dataset
-pub struct DatasetGenInput<'a, 'b, 'c> {
-    /// Path to base Cfg
-    cfg_path: &'a str,
-    data_dir: &'b Path,
-    no_samples: usize,
-    max_mutations_per_cfg: usize,
-    ds_label: String,
-    allowed_labels: &'c [usize],
-    max_iter_limit: usize,
+/// Defines the types of mutations possible on a CFG
+pub enum MutType {
+    /// Inserts a random terminal at a random location
+    InsertTerm,
+    /// Replaces a terminal with another terminal
+    ReplaceTerm,
+    /// Deletes a randomly picked terminal
+    DeleteTerm
 }
 
-impl<'a, 'b, 'c> DatasetGenInput<'a, 'b, 'c> {
+/// Defines input parameters for generating a dataset
+pub struct DatasetGenInput<'a, 'b, 'c, 'd, 'e> {
+    /// Path to base Cfg
+    cfg_path: &'a str,
+    /// Path to Cfg lex
+    cfg_lex: &'b str,
+    /// SinBAD instance to generate target label
+    sin: &'c SinBAD,
+    /// SinBAD backend to apply
+    sin_backend: &'e str,
+    /// SinBAD threshold depth
+    sin_depth: usize,
+    /// SinBAD running time for each CFG
+    sin_duration: usize,
+    /// Data directory to save CFGs and zip file
+    data_dir: &'d Path,
+    /// No of CFG samples to generate
+    no_samples: usize,
+    /// No of mutations allowed per CFG
+    max_mutations_per_cfg: usize,
+    /// mutation types: insert, replace, delete
+    mut_types: Vec<MutType>,
+    /// Label used to create zip file and sub directory within it
+    ds_label: String,
+    /// Maximum no of iterations allowed to generate dataset
+    max_iter: usize,
+}
+
+impl<'a, 'b, 'c, 'd, 'e> DatasetGenInput<'a, 'b, 'c, 'd, 'e> {
     pub fn new(cfg_path: &'a str,
-               data_dir: &'b Path,
+               cfg_lex: &'b str,
+               sin: &'c SinBAD,
+               sin_backend: &'e str,
+               sin_depth: usize,
+               sin_duration: usize,
+               data_dir: &'d Path,
                no_samples: usize,
                max_mutations_per_cfg: usize,
+               mut_types: Vec<MutType>,
                ds_label: String,
-               allowed_labels: &'c [usize],
-               max_iter_limit: usize) -> Self {
+               max_iter: usize) -> Self {
         Self {
             cfg_path,
+            cfg_lex,
+            sin,
+            sin_backend,
+            sin_depth,
+            sin_duration,
             data_dir,
             no_samples,
             max_mutations_per_cfg,
+            mut_types,
             ds_label,
-            allowed_labels,
-            max_iter_limit,
+            max_iter,
         }
     }
 }
@@ -61,7 +98,10 @@ fn prepare_zip_file(zip_p: &Path, ds_label: &str)
 
 /// Generate dataset based on input params `ds_input` and write to zip file.
 pub fn cfg_dataset_as_zip(ds_input: &DatasetGenInput) -> Result<(), CfgError> {
-    let ds = build_dataset(&ds_input)?;
+    let mut ds = build_dataset(&ds_input)?;
+    ds.build_unique_nodes_edges();
+    println!("unique nodes: {}, edges; {}", ds.node_ids_map.len(), ds.edge_ids_map.len());
+
     let ds_files = ds.persist(&ds_input.data_dir)?;
 
     let zip_p = ds_input.data_dir.join(format!("{}.zip", ds_input.ds_label));

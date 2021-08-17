@@ -1,31 +1,28 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::io::Write;
 use std::path::Path;
 
 use cfgz::lr1_check;
-use sinbad_rs::sinbad::SinBAD;
+use rand::{Rng, thread_rng};
 
 use crate::cfg::{Cfg, CfgError, parse};
 use crate::cfg::graph::{CfgGraph, GraphResult};
 use crate::cfg::mutate::CfgMutation;
-use std::io::Write;
-use rand::Rng;
-use crate::DatasetGenInput;
+use crate::{DatasetGenInput, MutType};
+use rand::prelude::SliceRandom;
 
 /// Represents the ML data associated with a Cfg Graph
 pub(crate) struct CfgData {
-    /// grammar file index
-    cfg_id: usize,
     /// Graph associated with the grammar
-    graph: GraphResult,
+    pub(crate) graph: GraphResult,
     /// label: 0 indicates grammar is unambiguous; 1 is ambiguous
-    label: usize,
+    pub(crate) label: usize,
 }
 
 impl CfgData {
-    pub(crate) fn new(cfg_id: usize, graph: GraphResult, label: usize) -> Self {
+    pub(crate) fn new(graph: GraphResult, label: usize) -> Self {
         Self {
-            cfg_id,
             graph,
             label,
         }
@@ -35,7 +32,7 @@ impl CfgData {
 impl fmt::Display for CfgData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = format!(
-            "[{}] graph: {}, label: {}", self.cfg_id, self.graph, self.label
+            "graph: {}, label: {}", self.graph, self.label
         );
         write!(f, "{}", s)
     }
@@ -56,7 +53,32 @@ impl CfgDataSet {
         }
     }
 
-    pub(crate) fn build_unique_nodes_map(&mut self) {
+    // /// Have an equal no of CFGs for each label
+    // pub(crate) fn curate(&mut self, cfgs_curate: bool) {
+    //     if cfgs_curate {
+    //         let mut label_0: Vec<&mut CfgData> = self.cfg_data
+    //             .iter_mut()
+    //             .map(|c| if c.label == 0 {
+    //                 c
+    //             }).collect();
+    //         let mut label_1: Vec<&CfgData> = self.cfg_data
+    //             .iter_mut()
+    //             .map(|c| if c.label == 1 {
+    //                 c
+    //             }).collect();
+    //
+    //         if label_1.len() < label_0.len() {
+    //             // get random label_1_cnt from label_0 cfg's
+    //             let mut rnd = thread_rng();
+    //             let cfgs_0: Vec<&CfgData> = label_0.choose_multiple(
+    //                 &mut rnd, label_1.len()
+    //             ).collect();
+    //         }
+    //     }
+    // }
+
+    /// Build a map of unique nodes from the CFGs in the dataset
+    fn build_unique_nodes_map(&mut self) {
         println!("=> building the list of unique nodes ...");
         let mut node_ids_map: HashMap<String, usize> = HashMap::new();
         let mut node_id_counter: usize = 0;
@@ -73,6 +95,7 @@ impl CfgDataSet {
         self.node_ids_map = node_ids_map;
     }
 
+    /// Build a map of unique edges from the CFGs in the dataset
     fn build_unique_edges_map(&mut self) {
         println!("=> building the list of unique edges ...");
         let mut edge_ids_map: HashMap<String, usize> = HashMap::new();
@@ -88,6 +111,12 @@ impl CfgDataSet {
             }
         }
         self.edge_ids_map = edge_ids_map;
+    }
+
+    /// Using the CFGs generated, build a collection of unique nodes and edges
+    pub(crate) fn build_unique_nodes_edges(&mut self) {
+        self.build_unique_nodes_map();
+        self.build_unique_edges_map();
     }
 
     /// CFG_node_labels.txt - `i`th line indicates the node label of the `i`th node
@@ -213,18 +242,32 @@ impl CfgDataSet {
     }
 }
 
+// fn weighted_label(labels_cnt: (usize, usize)) -> usize {
+//     let label_0 = labels_cnt.0 + 1;
+//     let label_1 = labels_cnt.1 + 1;
+//     let label_0_r: f32 = (label_0 as f32) / (label_0 + label_1) as f32;
+//     let label_1_r: f32 = (label_1 as f32) / (label_0 + label_1) as f32;
+//     let label_0_wgt = 1.0 - label_0_r;
+//     let label_1_wgt = 1.0 - label_1_r;
+//     let labels = [(0, label_0_wgt), (1, label_1_wgt)];
+//     let l = labels.choose_weighted(&mut thread_rng(), |lbl| lbl.1).unwrap().0;
+//     eprintln!("[{}, {}] ==> {:?} ==> {}", label_0, label_1, labels, l);
+//
+//     l
+// }
+
 /// Calculate the `label` for the given grammar, label:
 /// 0 - unambiguous
 /// 1 - ambiguous
-fn calc_label(cfg: &Cfg, data_dir: &Path, cfg_i: usize, sin: &SinBAD) -> Result<usize, CfgError> {
-    let cfg_acc = data_dir.join(format!("{}.acc", cfg_i));
+fn calc_label(cfg: &Cfg, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usize, CfgError> {
+    let cfg_acc = &ds_input.data_dir.join(format!("{}.acc", cfg_i));
     std::fs::write(&cfg_acc, cfg.as_acc())
         .map_err(|e| CfgError::new(
             format!("Error occurred whilst writing cfg in ACCENT format:\n{}",
                     e.to_string())
         ))?;
 
-    let cfg_yacc = data_dir.join(format!("{}.y", cfg_i));
+    let cfg_yacc = &ds_input.data_dir.join(format!("{}.y", cfg_i));
     std::fs::write(&cfg_yacc, cfg.as_yacc())
         .map_err(|e| CfgError::new(
             format!("Error occurred whilst writing cfg in YACC format:\n{}",
@@ -238,13 +281,14 @@ fn calc_label(cfg: &Cfg, data_dir: &Path, cfg_i: usize, sin: &SinBAD) -> Result<
     return match lr1 {
         true => { Ok(0) }
         false => {
-            let backend = "dynamic1";
-            let depth = 10;
             let gp = cfg_acc.as_path().to_str().unwrap();
-            let lp = "/home/krish/kv/sinbad/bin/general.lex";
-            let duration: usize = 10;
             let res = sinbad_rs::invoke(
-                &sin, duration, backend, depth, gp, lp,
+                &ds_input.sin,
+                ds_input.sin_duration,
+                &ds_input.sin_backend,
+                ds_input.sin_depth,
+                gp,
+                &ds_input.cfg_lex,
             )?;
             match res {
                 true => { Ok(1) }
@@ -260,43 +304,77 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
     let base_cfg = parse::parse(ds_input.cfg_path)?;
     let mut cfg_mut = CfgMutation::new(&base_cfg);
     cfg_mut.instantiate();
-    let total_mut_cnt = cfg_mut.total_mutations_cnt();
     let mut generated_cfgs: Vec<Cfg> = vec![];
     let mut i: usize = 0;
     let mut cfg_data: Vec<CfgData> = vec![];
-    let sin = sinbad_rs::sinbad()?;
+    let mut rnd = rand::thread_rng();
+    let mut label0_cfgs: Vec<Cfg> = vec![];
+    let mut label1_cfgs: Vec<Cfg> = vec![];
+    let label0_samples = ds_input.no_samples/2;
+    let label1_samples = ds_input.no_samples/2;
+    println!("No samples:: 0: {}, 1:{}", label0_samples, label1_samples);
 
     loop {
-        let mut rnd = rand::thread_rng();
+        eprint!(".");
         let no_mutations = rnd.gen_range(1..=ds_input.max_mutations_per_cfg);
-        let cfg = cfg_mut.mutate(no_mutations)?;
-        if !generated_cfgs.contains(&cfg) {
-            let g = CfgGraph::new(cfg.clone());
-            let g_result = g.instantiate()
-                .expect("Unable to convert cfg to graph");
-
-            let label: usize = calc_label(&cfg, &ds_input.data_dir, i, &sin)?;
-            if ds_input.allowed_labels.contains(&label) {
-                println!("{} (n:{}, e:{}) => {}", i, g_result.nodes.len(), g_result.edges.len(), label);
-                cfg_data.push(CfgData::new(i, g_result, label));
+        let mut_type = ds_input.mut_types.choose(&mut rnd).unwrap();
+        let cfg = match mut_type {
+            MutType::InsertTerm => {
+                eprint!("[i]");
+                cfg_mut.insert(no_mutations)?
             }
+            MutType::ReplaceTerm => {
+                eprint!("[r]");
+                cfg_mut.mutate(no_mutations)?
+            }
+            MutType::DeleteTerm => {
+                eprint!("[d]");
+                cfg_mut.delete(no_mutations)?
+            }
+        };
+        if !generated_cfgs.contains(&cfg) {
+            let label: usize = calc_label(&cfg, i, &ds_input)?;
+            // interested only in 0, 1
+            match label {
+                0 => {
+                    if label0_cfgs.len() < label0_samples {
+                        label0_cfgs.push(cfg.clone());
+                    }
+                }
+                1 => {
+                    if label1_cfgs.len() < label1_samples {
+                        label1_cfgs.push(cfg.clone());
+                    }
+                }
+                _ => {}
+            }
+
             generated_cfgs.push(cfg);
+            eprintln!("[{}/{}/{}] - {}", i, label0_cfgs.len(), label1_cfgs.len(), label);
+            std::io::stdout().flush().unwrap();
         }
         i += 1;
-        if (i >= ds_input.max_iter_limit) ||
-            (cfg_data.len() >= ds_input.no_samples) ||
-            (cfg_data.len() >= total_mut_cnt) {
+        if (i >= ds_input.max_iter) ||
+            ((label0_cfgs.len() >= label0_samples) &&
+                (label1_cfgs.len() >= label1_samples)) {
             break;
         }
-        std::io::stdout().flush().unwrap();
+    }
+    for cfg in label0_cfgs.drain(..) {
+        let g = CfgGraph::new(cfg);
+        let g_result = g.instantiate().expect("Unable to convert cfg to graph");
+        // eprintln!("[{},{}]", g_result.nodes.len(), g_result.edges.len());
+        cfg_data.push(CfgData::new(g_result, 0));
     }
 
-    let mut ds = CfgDataSet::new(cfg_data);
-    ds.build_unique_nodes_map();
-    ds.build_unique_edges_map();
-    println!("unique nodes: {}, edges; {}", ds.node_ids_map.len(), ds.edge_ids_map.len());
+    for cfg in label1_cfgs.drain(..) {
+        let g = CfgGraph::new(cfg);
+        let g_result = g.instantiate().expect("Unable to convert cfg to graph");
+        cfg_data.push(CfgData::new(g_result, 1));
+    }
+    cfg_data.shuffle(&mut rnd);
 
-    Ok(ds)
+    Ok(CfgDataSet::new(cfg_data))
 }
 
 #[cfg(test)]
