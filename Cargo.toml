@@ -23,7 +23,3 @@ zip = "0.5.13"
 tempdir = "0.3.7"
 cfgz = { git = "https://github.com/nvasudevan/cfgz", branch = "main"}
 sinbad_rs = { git = "https://github.com/nvasudevan/sinbad_rs", branch = "main"}
-
-[dependencies.pyo3]
-version = "0.13.2"
-features = ["auto-initialize"]
