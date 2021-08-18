@@ -143,7 +143,7 @@ impl CfgDataSet {
         Ok(())
     }
 
-    /// Write the class labels for graph
+    /// Write the class labels of graph to `graph_labels_file`.
     fn write_graph_labels(&self, graph_labels_file: &Path) -> Result<(), CfgError> {
         println!("=> writing graph labels to {}", graph_labels_file.to_str().unwrap());
         let graph_labels: Vec<String> = self.cfg_data
@@ -158,6 +158,7 @@ impl CfgDataSet {
         Ok(())
     }
 
+    /// Write the (node to graph) mapping to `graph_indicator_file`.
     fn write_graph_indicators(&self, graph_indicator_file: &Path) -> Result<(), CfgError> {
         println!("=> writing graph indicators to {}", graph_indicator_file.to_str().unwrap());
         let mut graph_indicator: Vec<String> = vec![];
@@ -242,23 +243,8 @@ impl CfgDataSet {
     }
 }
 
-// fn weighted_label(labels_cnt: (usize, usize)) -> usize {
-//     let label_0 = labels_cnt.0 + 1;
-//     let label_1 = labels_cnt.1 + 1;
-//     let label_0_r: f32 = (label_0 as f32) / (label_0 + label_1) as f32;
-//     let label_1_r: f32 = (label_1 as f32) / (label_0 + label_1) as f32;
-//     let label_0_wgt = 1.0 - label_0_r;
-//     let label_1_wgt = 1.0 - label_1_r;
-//     let labels = [(0, label_0_wgt), (1, label_1_wgt)];
-//     let l = labels.choose_weighted(&mut thread_rng(), |lbl| lbl.1).unwrap().0;
-//     eprintln!("[{}, {}] ==> {:?} ==> {}", label_0, label_1, labels, l);
-//
-//     l
-// }
-
 /// Calculate the `label` for the given grammar, label:
-/// 0 - unambiguous
-/// 1 - ambiguous
+/// 0 - unambiguous, 1 - ambiguous, 2 - don't know (has conflicts)
 fn calc_label(cfg: &Cfg, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usize, CfgError> {
     let cfg_acc = &ds_input.data_dir.join(format!("{}.acc", cfg_i));
     std::fs::write(&cfg_acc, cfg.as_acc())
@@ -299,42 +285,45 @@ fn calc_label(cfg: &Cfg, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usi
 }
 
 /// Build dataset from the given input params
+/// We are only interested in class labels 0 and 1.
+/// Also we aim to generate -- as much as possible -- an equal no of
+/// graphs for each label (0/1).
 pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, CfgError> {
-    println!("\n=> generating {} cfgs ...", ds_input.no_samples);
     let base_cfg = parse::parse(ds_input.cfg_path)?;
     let mut cfg_mut = CfgMutation::new(&base_cfg);
     cfg_mut.instantiate();
     let mut generated_cfgs: Vec<Cfg> = vec![];
-    let mut i: usize = 0;
     let mut cfg_data: Vec<CfgData> = vec![];
     let mut rnd = rand::thread_rng();
     let mut label0_cfgs: Vec<Cfg> = vec![];
     let mut label1_cfgs: Vec<Cfg> = vec![];
-    let label0_samples = ds_input.no_samples/2;
-    let label1_samples = ds_input.no_samples/2;
-    println!("No samples:: 0: {}, 1:{}", label0_samples, label1_samples);
+    let label0_samples = ds_input.no_samples / 2;
+    let label1_samples = ds_input.no_samples / 2;
+    println!("\n=> generating {} cfgs (0: {}, 1: {})",
+             ds_input.no_samples,
+             label0_samples,
+             label1_samples);
 
+    let mut i: usize = 0;
     loop {
-        eprint!(".");
         let no_mutations = rnd.gen_range(1..=ds_input.max_mutations_per_cfg);
         let mut_type = ds_input.mut_types.choose(&mut rnd).unwrap();
         let cfg = match mut_type {
             MutType::InsertTerm => {
-                eprint!("[i]");
+                eprint!("i/");
                 cfg_mut.insert(no_mutations)?
             }
             MutType::ReplaceTerm => {
-                eprint!("[r]");
+                eprint!("r/");
                 cfg_mut.mutate(no_mutations)?
             }
             MutType::DeleteTerm => {
-                eprint!("[d]");
+                eprint!("d/");
                 cfg_mut.delete(no_mutations)?
             }
         };
         if !generated_cfgs.contains(&cfg) {
             let label: usize = calc_label(&cfg, i, ds_input)?;
-            // interested only in 0, 1
             match label {
                 0 => {
                     if label0_cfgs.len() < label0_samples {
@@ -381,9 +370,6 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
 mod tests {
     extern crate tempdir;
 
-    
-
-    
     use crate::cfg::parse;
 
     #[test]

@@ -11,7 +11,6 @@ use crate::cfg::dataset::build_dataset;
 use sinbad_rs::sinbad::SinBAD;
 
 mod cfg;
-mod py3;
 
 /// Defines the types of mutations possible on a CFG
 pub enum MutType {
