@@ -378,20 +378,56 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
 mod tests {
     extern crate tempdir;
 
-    use crate::cfg::parse;
+    use crate::MutType;
+    use crate::DatasetGenInput;
+    use crate::cfg::dataset::build_dataset;
 
     #[test]
-    fn test_ds_generate() {
-        let _cfg = parse::parse("./grammars/lr1.y")
-            .expect("Unable to parse as a cfg");
-        //let cfgs = generate(&cfg, 3)
-        //    .expect("Unable to generate mutated CFGs");
-        //let data_dir = TempDir::new("cfg-ds")
-        //    .expect("Unable to create temp dir");
-        //let _ = build_dataset(&cfgs, data_dir.path())
-        //    .expect("Unable to build dataset from cfgs");
+    fn test_build_dataset() {
+        let cfg_path = "./grammars/lr1.y";
+        let cfg_lex = "/home/krish/kv/sinbad/bin/general.lex";
 
-        //data_dir.close()
-        //    .expect("Unable to close the data directory");
+        std::env::set_var("SINBAD_CMD", "/home/krish/kv/sinbad/src/sinbad");
+        std::env::set_var("ACCENT_DIR", "/home/krish/kv/accent");
+        std::env::set_var("TIMEOUT_CMD", "/usr/bin/timeout");
+
+        let sin = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
+        let sin_backend = "dynamic1";
+        let sin_depth = 10;
+        let sin_duration: usize = 10;
+
+        let td = tempdir::TempDir::new("cfg_ds")
+            .expect("Unable to create a temporary directory");
+        let data_dir = td.path();
+        eprintln!("data dir: {}", data_dir.to_str().unwrap());
+        let ds_label = "CFG";
+        let no_samples: usize = 2;
+        let max_mutations_per_cfg: usize = 1;
+        let mut_types = vec![
+            MutType::InsertTerm,
+            MutType::ReplaceTerm,
+            MutType::DeleteTerm,
+        ];
+        let max_iter = 100;
+
+        let ds_input = DatasetGenInput::new(
+            cfg_path,
+            cfg_lex,
+            &sin,
+            sin_backend,
+            sin_depth,
+            sin_duration,
+            data_dir,
+            no_samples,
+            max_mutations_per_cfg,
+            mut_types,
+            ds_label.to_owned(),
+            max_iter,
+        );
+        let ds = build_dataset(&ds_input)
+            .expect("Unable to build dataset from cfgs");
+
+        assert_eq!(ds.cfg_data.len(), no_samples);
     }
 }

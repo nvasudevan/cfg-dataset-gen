@@ -19,7 +19,7 @@ pub(crate) struct Node {
     pub(crate) node_id: usize,
     /// Parent node that this node derived from
     /// For root node, this is set to None
-    pub(crate) parent_node: Option<Rc<Node>>
+    pub(crate) parent_node: Option<Rc<Node>>,
 }
 
 impl Node {
@@ -30,14 +30,14 @@ impl Node {
                       item: &[LexSymbol],
                       index: usize,
                       node_id: usize,
-                      parent_node: Option<Rc<Node>>
+                      parent_node: Option<Rc<Node>>,
     ) -> Self {
         Self {
             lhs: lhs.to_owned(),
             item: item.to_owned(),
             index,
             node_id,
-            parent_node
+            parent_node,
         }
     }
 
@@ -71,7 +71,7 @@ impl fmt::Display for Node {
             .map(|x| x.to_string()).collect();
 
         let parent_node = match &self.parent_node {
-            Some(p_n) => { p_n.node_id.to_string() },
+            Some(p_n) => { p_n.node_id.to_string() }
             _ => { String::new() }
         };
         write!(f, "{}", format!("[{}->{}][{}: {}.{}]",
@@ -218,14 +218,14 @@ impl fmt::Display for InOutEdges {
 #[derive(Debug)]
 pub(crate) struct CyclicLink {
     pub(crate) node: Rc<Node>,
-    pub(crate) parent: Rc<Node>
+    pub(crate) parent: Rc<Node>,
 }
 
 impl CyclicLink {
     pub(crate) fn new(node: &Rc<Node>, parent: &Rc<Node>) -> Self {
         Self {
             node: Rc::clone(node),
-            parent: Rc::clone(parent)
+            parent: Rc::clone(parent),
         }
     }
 }
@@ -424,7 +424,7 @@ impl CfgGraph {
     ///  - [Y: . r] -->[r] [Y: r .] -- shifting terminal `r`
     ///  - [Y: r .] -->[<eps>] [X; P q Y .] -- reduction
     fn build_graph(&self, nt: &str, parent: &Rc<Node>, mut g_result: &mut GraphResult)
-        -> Result<(), CfgError> {
+                   -> Result<(), CfgError> {
         let rule = self.cfg.get_rule(nt)
             .ok_or_else(||
                 CfgError::new(format!("Unable to get rule for non-terminal {}", nt))
@@ -441,7 +441,7 @@ impl CfgGraph {
                                 alt.lex_symbols.as_slice(),
                                 i,
                                 g_result.inc_node_id(),
-                                Some(Rc::clone(parent))
+                                Some(Rc::clone(parent)),
                             )
                         );
                         // create the derive edge from the parent
@@ -458,9 +458,9 @@ impl CfgGraph {
                             Node::new(
                                 &rule.lhs,
                                 alt.lex_symbols.as_slice(),
-                                i+1,
+                                i + 1,
                                 g_result.inc_node_id(),
-                                Option::from(Rc::clone(parent))
+                                Option::from(Rc::clone(parent)),
                             )
                         );
                         g_result.add_node(Rc::clone(&tgt_sym_node));
@@ -497,9 +497,9 @@ impl CfgGraph {
                                     Node::new(
                                         &rule.lhs,
                                         alt.lex_symbols.as_slice(),
-                                        i+1,
+                                        i + 1,
                                         g_result.inc_node_id(),
-                                        Option::from(Rc::clone(parent))
+                                        Option::from(Rc::clone(parent)),
                                     )
                                 );
                                 g_result.add_node(Rc::clone(&tgt_sym_node));
@@ -529,12 +529,12 @@ impl CfgGraph {
         let mut g_result = GraphResult::new();
         let root_item = vec![LexSymbol::NonTerm(NonTermSymbol::new("root".to_owned()))];
         let root_s_node = Node::new(
-            "", root_item.as_slice(), 0, g_result.node_id(), None
+            "", root_item.as_slice(), 0, g_result.node_id(), None,
         );
         let root_s = Rc::new(root_s_node);
 
         let root_e_node = Node::new(
-            "", root_item.as_slice(), 1, g_result.inc_node_id(), None
+            "", root_item.as_slice(), 1, g_result.inc_node_id(), None,
         );
         let root_e = Rc::new(root_e_node);
         g_result.add_node(Rc::clone(&root_s));
@@ -572,24 +572,9 @@ mod tests {
 
     fn graph(cfgp: &str) -> Result<CfgGraph, CfgError> {
         let cfg = parse::parse(cfgp)?;
-        let graph = CfgGraph::new(cfg);
+        let graph = CfgGraph::new(Rc::new(cfg));
 
         Ok(graph)
-    }
-
-    fn print_graph(g_result: &GraphResult) {
-        println!("\n=> nodes:\n");
-        for n in &g_result.nodes {
-            println!("{}", n);
-        }
-        println!("\n=> edges:\n");
-        for e in &g_result.edges {
-            println!("{}", e);
-        }
-        println!("\n=> node in/out edges:\n");
-        for (node_id, in_out) in g_result.node_edge_map.iter() {
-            println!("\n=> node: {}{}", node_id, in_out);
-        }
     }
 
     #[test]
@@ -666,15 +651,7 @@ mod tests {
             .expect("grammar parse failed");
         let g_result = g.instantiate()
             .expect("Unable to convert cfg to graph");
-        print_graph(&g_result);
-    }
-
-    #[test]
-    fn test_medium_sized_cfg() {
-        let g = graph("./grammars/lr1.y")
-            .expect("grammar parse failed");
-        let g_result = g.instantiate()
-            .expect("Unable to convert cfg to graph");
-        print_graph(&g_result);
+        // there are two cyclic links
+        assert_eq!(g_result.cyclic_links.len(), 2);
     }
 }
