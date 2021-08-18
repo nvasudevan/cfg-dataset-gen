@@ -382,13 +382,13 @@ impl fmt::Display for GraphResult {
 /// Represents a CFG graph
 #[derive(Debug)]
 pub(crate) struct CfgGraph {
-    cfg: Cfg,
+    cfg: Rc<Cfg>,
     nodes: Vec<Rc<Node>>,
     edges: Vec<Rc<Edge>>,
 }
 
 impl CfgGraph {
-    pub(crate) fn new(cfg: Cfg) -> Self {
+    pub(crate) fn new(cfg: Rc<Cfg>) -> Self {
         Self {
             cfg,
             nodes: Vec::<Rc<Node>>::new(),

@@ -1,16 +1,21 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::io::Write;
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    fmt,
+    io::Write,
+    path::Path,
+    rc::Rc,
+};
 
 use cfgz::lr1_check;
-use rand::{Rng};
+use rand::{
+    Rng,
+    prelude::SliceRandom,
+};
 
 use crate::cfg::{Cfg, CfgError, parse};
 use crate::cfg::graph::{CfgGraph, GraphResult};
 use crate::cfg::mutate::CfgMutation;
 use crate::{DatasetGenInput, MutType};
-use rand::prelude::SliceRandom;
 
 /// Represents the ML data associated with a Cfg Graph
 pub(crate) struct CfgData {
@@ -245,7 +250,7 @@ impl CfgDataSet {
 
 /// Calculate the `label` for the given grammar, label:
 /// 0 - unambiguous, 1 - ambiguous, 2 - don't know (has conflicts)
-fn calc_label(cfg: &Cfg, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usize, CfgError> {
+fn calc_label(cfg: Rc<Cfg>, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usize, CfgError> {
     let cfg_acc = &ds_input.data_dir.join(format!("{}.acc", cfg_i));
     std::fs::write(&cfg_acc, cfg.as_acc())
         .map_err(|e| CfgError::new(
@@ -292,13 +297,12 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
     let base_cfg = parse::parse(ds_input.cfg_path)?;
     let mut cfg_mut = CfgMutation::new(&base_cfg);
     cfg_mut.instantiate();
-    let mut generated_cfgs: Vec<Cfg> = vec![];
-    let mut cfg_data: Vec<CfgData> = vec![];
+    let mut generated_cfgs: Vec<Rc<Cfg>> = Vec::with_capacity(ds_input.no_samples);
     let mut rnd = rand::thread_rng();
-    let mut label0_cfgs: Vec<Cfg> = vec![];
-    let mut label1_cfgs: Vec<Cfg> = vec![];
     let label0_samples = ds_input.no_samples / 2;
     let label1_samples = ds_input.no_samples / 2;
+    let mut label0_cfgs: Vec<Rc<Cfg>> = Vec::with_capacity(label0_samples);
+    let mut label1_cfgs: Vec<Rc<Cfg>> = Vec::with_capacity(label1_samples);
     println!("\n=> generating {} cfgs (0: {}, 1: {})",
              ds_input.no_samples,
              label0_samples,
@@ -322,23 +326,24 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
                 cfg_mut.delete(no_mutations)?
             }
         };
-        if !generated_cfgs.contains(&cfg) {
-            let label: usize = calc_label(&cfg, i, ds_input)?;
+        let cfg_rc = Rc::new(cfg);
+        if !generated_cfgs.contains(&cfg_rc) {
+            let label: usize = calc_label(Rc::clone(&cfg_rc), i, ds_input)?;
             match label {
                 0 => {
                     if label0_cfgs.len() < label0_samples {
-                        label0_cfgs.push(cfg.clone());
+                        label0_cfgs.push(Rc::clone(&cfg_rc));
                     }
                 }
                 1 => {
                     if label1_cfgs.len() < label1_samples {
-                        label1_cfgs.push(cfg.clone());
+                        label1_cfgs.push(Rc::clone(&cfg_rc));
                     }
                 }
                 _ => {}
             }
 
-            generated_cfgs.push(cfg);
+            generated_cfgs.push(cfg_rc);
             eprintln!("[{}/{}/{}] - {}", i, label0_cfgs.len(), label1_cfgs.len(), label);
             std::io::stdout().flush().unwrap();
         }
@@ -349,6 +354,9 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
             break;
         }
     }
+    // build our cfg dataset
+    let cfgs_cnt = label0_cfgs.len() + label1_cfgs.len();
+    let mut cfg_data: Vec<CfgData> = Vec::with_capacity(cfgs_cnt);
     for cfg in label0_cfgs.drain(..) {
         let g = CfgGraph::new(cfg);
         let g_result = g.instantiate().expect("Unable to convert cfg to graph");
