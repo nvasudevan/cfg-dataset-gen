@@ -6,9 +6,13 @@ use std::path::Path;
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
-use crate::cfg::CfgError;
-use crate::cfg::dataset::build_dataset;
+use crate::cfg::{CfgError, parse};
+use crate::cfg::dataset::{build_dataset, CfgDataSet, CfgData};
 use sinbad_rs::sinbad::SinBAD;
+use crate::cfg::graph::CfgGraph;
+use std::rc::Rc;
+
+use cfgz::lr1_check;
 
 mod cfg;
 
@@ -19,7 +23,7 @@ pub enum MutType {
     /// Replaces a terminal with another terminal
     ReplaceTerm,
     /// Deletes a randomly picked terminal
-    DeleteTerm
+    DeleteTerm,
 }
 
 /// Defines input parameters for generating a dataset
@@ -98,6 +102,7 @@ fn prepare_zip_file(zip_p: &Path, ds_label: &str)
 /// Generate dataset based on input params `ds_input` and write to zip file.
 pub fn cfg_dataset_as_zip(ds_input: &DatasetGenInput) -> Result<(), CfgError> {
     let mut ds = build_dataset(ds_input)?;
+    println!("=> building list of unique nodes+edges ...");
     ds.build_unique_nodes_edges();
     println!("unique nodes: {}, edges; {}", ds.node_ids_map.len(), ds.edge_ids_map.len());
 
@@ -123,4 +128,28 @@ pub fn cfg_dataset_as_zip(ds_input: &DatasetGenInput) -> Result<(), CfgError> {
     zip.finish().unwrap();
 
     Ok(())
+}
+
+/// Benchmark dataset generation for a small collection of CFGs
+pub fn cfg_graph_bench(cfgs: &[String]) {
+    let mut cfg_data: Vec<CfgData> = Vec::with_capacity(cfgs.len());
+    for gp in cfgs {
+        let cfg = parse::parse(&gp)
+            .expect("Unable to parse the grammar!");
+        let g = CfgGraph::new(Rc::new(cfg));
+        let g_result = g.instantiate()
+            .expect("Unable to process Cfg Graph");
+        cfg_data.push(CfgData::new(g_result, 0));
+    }
+    let mut cfg_ds = CfgDataSet::new(cfg_data);
+    cfg_ds.build_unique_nodes_edges();
+    let td = tempdir::TempDir::new("cfg-bench")
+        .expect("Unable to create a temporary directory");
+    let label_files = cfg_ds.persist(td.path())
+        .expect("Error whilst generating node labels");
+}
+
+pub fn bison_lr1_check(cfg_path: &str) {
+   let _ = lr1_check(Path::new(cfg_path), false)
+       .expect("Bison failed on grammar!");
 }

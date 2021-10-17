@@ -84,7 +84,6 @@ impl CfgDataSet {
 
     /// Build a map of unique nodes from the CFGs in the dataset
     fn build_unique_nodes_map(&mut self) {
-        println!("=> building the list of unique nodes ...");
         let mut node_ids_map: HashMap<String, usize> = HashMap::new();
         let mut node_id_counter: usize = 0;
 
@@ -102,7 +101,6 @@ impl CfgDataSet {
 
     /// Build a map of unique edges from the CFGs in the dataset
     fn build_unique_edges_map(&mut self) {
-        println!("=> building the list of unique edges ...");
         let mut edge_ids_map: HashMap<String, usize> = HashMap::new();
         let mut edge_id_counter: usize = 0;
 
@@ -126,7 +124,6 @@ impl CfgDataSet {
 
     /// CFG_node_labels.txt - `i`th line indicates the node label of the `i`th node
     fn write_node_labels(&self, node_labels_file: &Path) -> Result<(), CfgError> {
-        println!("=> writing node labels to {}", node_labels_file.to_str().unwrap());
         let mut node_labels: Vec<String> = vec![];
         for cfg in &self.cfg_data {
             for n in &cfg.graph.nodes {
@@ -136,13 +133,11 @@ impl CfgDataSet {
                         CfgError::new(
                             format!("Didn't find node {} in node_ids_map", n))
                     )?;
-                // println!("{} -- {}", n, v);
-                node_labels.push(v.to_string());
+                node_labels.push((*v).to_string());
             }
         }
 
-        let node_labels_s = node_labels.join("\n");
-        std::fs::write(node_labels_file, node_labels_s)
+        std::fs::write(&node_labels_file, node_labels.join("\n"))
             .expect("Unable to write node ids' to file");
 
         Ok(())
@@ -150,7 +145,7 @@ impl CfgDataSet {
 
     /// Write the class labels of graph to `graph_labels_file`.
     fn write_graph_labels(&self, graph_labels_file: &Path) -> Result<(), CfgError> {
-        println!("=> writing graph labels to {}", graph_labels_file.to_str().unwrap());
+        // println!("=> writing graph labels to {}", graph_labels_file.to_str().unwrap());
         let graph_labels: Vec<String> = self.cfg_data
             .iter()
             .map(|c| c.label.to_string())
@@ -165,7 +160,7 @@ impl CfgDataSet {
 
     /// Write the (node to graph) mapping to `graph_indicator_file`.
     fn write_graph_indicators(&self, graph_indicator_file: &Path) -> Result<(), CfgError> {
-        println!("=> writing graph indicators to {}", graph_indicator_file.to_str().unwrap());
+        // println!("=> writing graph indicators to {}", graph_indicator_file.to_str().unwrap());
         let mut graph_indicator: Vec<String> = vec![];
         for (i, cfg) in self.cfg_data.iter().enumerate() {
             for _ in &cfg.graph.nodes {
@@ -182,8 +177,8 @@ impl CfgDataSet {
 
     /// Create `CFG_A.txt` containing the sparse matrix of all edges
     fn write_edge_labels(&self, edge_labels_file: &Path, edges_file: &Path) -> Result<(), CfgError> {
-        println!("=> writing edge labels to {}", edge_labels_file.to_str().unwrap());
-        println!("=> writing edges (sparse matrix) to {}", edges_file.to_str().unwrap());
+        // println!("=> writing edge labels to {}", edge_labels_file.to_str().unwrap());
+        // println!("=> writing edges (sparse matrix) to {}", edges_file.to_str().unwrap());
         let mut n_i = 1;
         let mut edge_labels: Vec<String> = vec![];
         let mut edges: Vec<String> = vec![];
@@ -221,6 +216,7 @@ impl CfgDataSet {
     /// - node to graph mapping (CFG_graph_indicator.txt)
     /// - edge labels (CFG_edge_labels.txt)
     pub(crate) fn persist(&self, data_dir: &Path) -> Result<Vec<String>, CfgError> {
+        // println!("=> generating label artifacts ...");
         let mut ds_files: Vec<String> = vec![];
         let node_labels_file = data_dir.join("CFG_node_labels.txt");
         self.write_node_labels(&node_labels_file)?;
@@ -264,7 +260,8 @@ fn calc_label(cfg: Rc<Cfg>, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<
             format!("Error occurred whilst writing cfg in YACC format:\n{}",
                     e.to_string())
         ))?;
-    let lr1 = lr1_check(cfg_yacc.as_path())
+    let out = false;
+    let lr1 = lr1_check(cfg_yacc.as_path(), out)
         .map_err(|e|
             CfgError::new(format!("Error: {}", e.to_string()))
         )?;

@@ -23,7 +23,7 @@ fn main() {
             panic!("Unable to create data directory: {}", data_dir.to_str().unwrap())
         );
     let ds_label = "CFG";
-    let no_samples: usize = 900;
+    let no_samples: usize = 5;
     let max_mutations_per_cfg: usize = 2;
     let mut_types = vec![
         MutType::InsertTerm,
