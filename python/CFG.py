@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # n_splits = 10
     # for faster performance, set epoch to a small value
     # for better accuracy, set epoch to a high value
-    epochs = 2
+    epochs = 20
     # es = EarlyStopping(monitor="val_loss",
     #                    min_delta=0,
     #                    patience=25,
@@ -156,9 +156,9 @@ if __name__ == "__main__":
 
     train_size = 0.7
     shuffle = True
-    layer1 = [64, 32, 16]
-    layer2 = [64, 32, 16]
-    adams = [0.001, 0.005]
+    layer1 = [128] #, 32, 16]
+    layer2 = [128, 64] #, 32, 16]
+    adams = [0.005]
     results = []
     for l1 in layer1:
         for l2 in layer2:

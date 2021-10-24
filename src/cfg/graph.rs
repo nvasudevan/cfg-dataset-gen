@@ -6,6 +6,7 @@ use std::{
 use crate::cfg::{Cfg, EpsilonSymbol, LexSymbol, NonTermSymbol, CfgError};
 use std::collections::HashMap;
 
+
 /// Represents a Cfg graph node/vertex
 #[derive(Debug, Clone)]
 pub(crate) struct Node {
@@ -552,6 +553,7 @@ impl CfgGraph {
         Ok(g_result)
     }
 }
+
 
 #[cfg(test)]
 mod tests {
