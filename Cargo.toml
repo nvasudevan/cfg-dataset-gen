@@ -1,9 +1,9 @@
-cargo-features = ["edition2021"]
+#cargo-features = ["edition2021"]
 [package]
 name = "cfg_dataset_gen"
 version = "0.1.0"
 authors = ["Naveneetha Vasudevan <naveneetha@yahoo.com>"]
-edition = "2021"
+edition = "2018"
 
 [lib]
 name = "cfg_dataset_gen"
@@ -13,7 +13,16 @@ path = "src/lib.rs"
 name = "cfg_dataset_gen"
 path = "src/main.rs"
 
+[profile.release]
+debug = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "my_benchmark"
+harness = false
 
 [dependencies]
 regex = "1.5.4"
