@@ -13,7 +13,7 @@ class CFG(
     DatasetLoader,
     name="CFG",
     directory_name="CFG",
-    url="http://localhost:8000/CFG.zip",
+    url="http://cfg-dataset:8000/CFG.zip",
     url_archive_format="zip",
     expected_files=[
         "CFG_A.txt",
@@ -156,8 +156,8 @@ if __name__ == "__main__":
 
     train_size = 0.7
     shuffle = True
-    layer1 = [128] #, 32, 16]
-    layer2 = [128, 64] #, 32, 16]
+    layer1 = [128, 32, 16]
+    layer2 = [128, 64, 32, 16]
     adams = [0.005]
     results = []
     for l1 in layer1:
