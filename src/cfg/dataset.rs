@@ -277,11 +277,19 @@ fn calc_label(cfg: Rc<Cfg>, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<
                 ds_input.sin_depth,
                 gp,
                 ds_input.cfg_lex,
-            )?;
+            );
             match res {
-                true => { Ok(1) }
-                false => { Ok(2) }
+                Ok(sin_out) => {
+                    if sin_out.is_amb() {
+                        return Ok(1);
+                    }
+                }
+                Err(e) => {
+                    println!("error:\n{}", e.to_string());
+                }
             }
+
+            Ok(2)
         }
     };
 }
@@ -375,19 +383,28 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
 mod tests {
     extern crate tempdir;
 
+    use std::rc::Rc;
     use crate::MutType;
     use crate::DatasetGenInput;
-    use crate::cfg::dataset::build_dataset;
+    use crate::cfg::dataset::{build_dataset, calc_label};
+    use crate::cfg::parse;
+
+    fn env_check() {
+        std::env::var("SINBAD_CMD")
+            .expect("set env variable SINBAD_CMD to point to the sinbad tool");
+        std::env::var("TIMEOUT_CMD")
+            .expect("set env variable TIMEOUT_CMD to point to the timeout command");
+        std::env::var("ACCENT_DIR")
+            .expect("set env variable ACCENT_DIR to point to the ACCENT compiler \
+            directory");
+    }
 
     #[test]
     fn test_build_dataset() {
         let cfg_path = "./grammars/lr1.y";
-        let cfg_lex = "/home/krish/kv/sinbad/bin/general.lex";
+        let cfg_lex = "./grammars/general.lex";
 
-        std::env::set_var("SINBAD_CMD", "/home/krish/kv/sinbad/src/sinbad");
-        std::env::set_var("ACCENT_DIR", "/home/krish/kv/accent");
-        std::env::set_var("TIMEOUT_CMD", "/usr/bin/timeout");
-
+        env_check();
         let sin = sinbad_rs::sinbad()
             .expect("Unable to create sinbad instance!");
         let sin_backend = "dynamic1";
@@ -426,5 +443,74 @@ mod tests {
             .expect("Unable to build dataset from cfgs");
 
         assert_eq!(ds.cfg_data.len(), no_samples);
+    }
+
+    #[test]
+    fn test_calc_label_unamb() {
+        let cfg_path = "./grammars/lr1.y";
+        let cfg_lex = "/home/krish/kv/labs/sinbad/bin/general.lex";
+
+        std::env::set_var("SINBAD_CMD", "/home/krish/kv/labs/sinbad/src/sinbad");
+        std::env::set_var("ACCENT_DIR", "/home/krish/kv/labs/accent");
+        std::env::set_var("TIMEOUT_CMD", "/usr/bin/timeout");
+
+        let sin = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
+        let sin_backend = "dynamic1";
+        let sin_depth = 10;
+        let sin_duration: usize = 10;
+
+    }
+
+    #[test]
+    fn test_calc_label_amb() {
+        let cfg_path = "./grammars/amb.y";
+        let cfg_lex = "./grammars/general.lex";
+
+        env_check();
+        let sin = sinbad_rs::sinbad();
+
+        let sin = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
+        let sin_backend = "dynamic1";
+        let sin_depth = 10;
+        let sin_duration: usize = 10;
+        let td = tempdir::TempDir::new("cfg_ds")
+            .expect("Unable to create a temporary directory");
+        let data_dir = td.path();
+        eprintln!("data dir: {}", data_dir.to_str().unwrap());
+        let ds_label = "CFG";
+        let no_samples: usize = 2;
+        let max_mutations_per_cfg: usize = 1;
+        let mut_types = vec![
+            MutType::InsertTerm,
+            MutType::ReplaceTerm,
+            MutType::DeleteTerm,
+        ];
+        let max_iter = 100;
+
+        let cfg = parse::parse(&cfg_path)
+            .expect("Unable to parse the given cfg");
+
+        let cfg_rc = Rc::new(cfg);
+
+        let ds_input = DatasetGenInput::new(
+            cfg_path,
+            cfg_lex,
+            &sin,
+            sin_backend,
+            sin_depth,
+            sin_duration,
+            data_dir,
+            no_samples,
+            max_mutations_per_cfg,
+            mut_types,
+            ds_label.to_owned(),
+            max_iter,
+        );
+        let label: usize = calc_label(cfg_rc, 0, &ds_input)
+            .expect("Unable to calculate amb/unamb label");
+
+        assert_eq!(label, 1);
     }
 }

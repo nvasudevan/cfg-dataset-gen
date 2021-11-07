@@ -145,7 +145,7 @@ pub fn cfg_graph_bench(cfgs: &[String]) {
     cfg_ds.build_unique_nodes_edges();
     let td = tempdir::TempDir::new("cfg-bench")
         .expect("Unable to create a temporary directory");
-    let label_files = cfg_ds.persist(td.path())
+    let _ = cfg_ds.persist(td.path())
         .expect("Error whilst generating node labels");
 }
 
