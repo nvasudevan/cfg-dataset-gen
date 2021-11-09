@@ -446,24 +446,58 @@ mod tests {
     }
 
     #[test]
-    fn test_calc_label_unamb() {
+    fn test_calc_label_unambiguous() {
         let cfg_path = "./grammars/lr1.y";
         let cfg_lex = "/home/krish/kv/labs/sinbad/bin/general.lex";
 
-        std::env::set_var("SINBAD_CMD", "/home/krish/kv/labs/sinbad/src/sinbad");
-        std::env::set_var("ACCENT_DIR", "/home/krish/kv/labs/accent");
-        std::env::set_var("TIMEOUT_CMD", "/usr/bin/timeout");
+        env_check();
+        let sin = sinbad_rs::sinbad();
 
         let sin = sinbad_rs::sinbad()
             .expect("Unable to create sinbad instance!");
         let sin_backend = "dynamic1";
         let sin_depth = 10;
         let sin_duration: usize = 10;
+        let td = tempdir::TempDir::new("cfg_ds")
+            .expect("Unable to create a temporary directory");
+        let data_dir = td.path();
+        let ds_label = "CFG";
+        let no_samples: usize = 2;
+        let max_mutations_per_cfg: usize = 1;
+        let mut_types = vec![
+            MutType::InsertTerm,
+            MutType::ReplaceTerm,
+            MutType::DeleteTerm,
+        ];
+        let max_iter = 100;
 
+        let cfg = parse::parse(&cfg_path)
+            .expect("Unable to parse the given cfg");
+
+        let cfg_rc = Rc::new(cfg);
+
+        let ds_input = DatasetGenInput::new(
+            cfg_path,
+            cfg_lex,
+            &sin,
+            sin_backend,
+            sin_depth,
+            sin_duration,
+            data_dir,
+            no_samples,
+            max_mutations_per_cfg,
+            mut_types,
+            ds_label.to_owned(),
+            max_iter,
+        );
+        let label: usize = calc_label(cfg_rc, 0, &ds_input)
+            .expect("Unable to calculate amb/unamb label");
+
+        assert_eq!(label, 0);
     }
 
     #[test]
-    fn test_calc_label_amb() {
+    fn test_calc_label_ambiguous() {
         let cfg_path = "./grammars/amb.y";
         let cfg_lex = "./grammars/general.lex";
 
@@ -478,7 +512,6 @@ mod tests {
         let td = tempdir::TempDir::new("cfg_ds")
             .expect("Unable to create a temporary directory");
         let data_dir = td.path();
-        eprintln!("data dir: {}", data_dir.to_str().unwrap());
         let ds_label = "CFG";
         let no_samples: usize = 2;
         let max_mutations_per_cfg: usize = 1;
