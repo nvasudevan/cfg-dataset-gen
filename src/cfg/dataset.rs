@@ -1,3 +1,5 @@
+extern crate tempdir;
+
 use std::{
     collections::HashMap,
     fmt,
@@ -5,17 +7,21 @@ use std::{
     path::Path,
     rc::Rc,
 };
+use std::collections::hash_map;
 
 use cfgz::lr1_check;
 use rand::{
     Rng,
     prelude::SliceRandom,
 };
+use sinbad_rs::sinbad::{SinBAD, SinBADInput};
 
 use crate::cfg::{Cfg, CfgError, parse};
 use crate::cfg::graph::{CfgGraph, GraphResult};
 use crate::cfg::mutate::CfgMutation;
 use crate::{DatasetGenInput, MutType};
+
+use uuid::Uuid;
 
 /// Represents the ML data associated with a Cfg Graph
 pub(crate) struct CfgData {
@@ -90,7 +96,7 @@ impl CfgDataSet {
         for cfg in &self.cfg_data {
             for node in &cfg.graph.nodes {
                 let node_s = node.min_item_string();
-                if let std::collections::hash_map::Entry::Vacant(e) = node_ids_map.entry(node_s) {
+                if let hash_map::Entry::Vacant(e) = node_ids_map.entry(node_s) {
                     e.insert(node_id_counter);
                     node_id_counter += 1;
                 }
@@ -246,15 +252,16 @@ impl CfgDataSet {
 
 /// Calculate the `label` for the given grammar, label:
 /// 0 - unambiguous, 1 - ambiguous, 2 - don't know (has conflicts)
-fn calc_label(cfg: Rc<Cfg>, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<usize, CfgError> {
-    let cfg_acc = &ds_input.data_dir.join(format!("{}.acc", cfg_i));
+fn calc_label(cfg: Rc<Cfg>, sin: &SinBAD, sin_input: &SinBADInput, lp: &str) -> Result<usize, CfgError> {
+    let gp_prefix = Uuid::new_v4();
+    let cfg_acc = std::env::temp_dir().join(format!("{}.acc", gp_prefix));
     std::fs::write(&cfg_acc, cfg.as_acc())
         .map_err(|e| CfgError::new(
             format!("Error occurred whilst writing cfg in ACCENT format:\n{}",
                     e.to_string())
         ))?;
 
-    let cfg_yacc = &ds_input.data_dir.join(format!("{}.y", cfg_i));
+    let cfg_yacc = std::env::temp_dir().join(format!("{}.y", gp_prefix));
     std::fs::write(&cfg_yacc, cfg.as_yacc())
         .map_err(|e| CfgError::new(
             format!("Error occurred whilst writing cfg in YACC format:\n{}",
@@ -270,24 +277,25 @@ fn calc_label(cfg: Rc<Cfg>, cfg_i: usize, ds_input: &DatasetGenInput) -> Result<
         true => { Ok(0) }
         false => {
             let gp = cfg_acc.as_path().to_str().unwrap();
-            let res = sinbad_rs::invoke(
-                ds_input.sin,
-                ds_input.sin_duration,
-                ds_input.sin_backend,
-                ds_input.sin_depth,
+            let sin_out = sinbad_rs::invoke(
+                sin,
+                sin_input,
                 gp,
-                ds_input.cfg_lex,
-            );
-            match res {
-                Ok(sin_out) => {
-                    if sin_out.is_amb() {
-                        return Ok(1);
-                    }
-                }
-                Err(e) => {
-                    println!("error:\n{}", e.to_string());
-                }
+                lp,
+            )?;
+            if sin_out.is_amb() {
+                return Ok(1);
             }
+            // match res {
+            //     Ok(sin_out) => {
+            //         if sin_out.is_amb() {
+            //             return Ok(1);
+            //         }
+            //     }
+            //     Err(e) => {
+            //         eprint!("error [{}] ({}){}", e.r_code.unwrap_or_else(|| -1), gp_prefix, e.to_string());
+            //     }
+            // }
 
             Ok(2)
         }
@@ -333,7 +341,12 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
         };
         let cfg_rc = Rc::new(cfg);
         if !generated_cfgs.contains(&cfg_rc) {
-            let label: usize = calc_label(Rc::clone(&cfg_rc), i, ds_input)?;
+            let label: usize = calc_label(
+                Rc::clone(&cfg_rc),
+                ds_input.sin,
+                ds_input.sin_input,
+                ds_input.cfg_lex,
+            )?;
             match label {
                 0 => {
                     if label0_cfgs.len() < label0_samples {
@@ -353,7 +366,7 @@ pub(crate) fn build_dataset(ds_input: &DatasetGenInput) -> Result<CfgDataSet, Cf
             std::io::stdout().flush().unwrap();
         }
         i += 1;
-        if (i >= ds_input.max_iter) ||
+        if (i >= ds_input.max_iterations) ||
             ((label0_cfgs.len() >= label0_samples) &&
                 (label1_cfgs.len() >= label1_samples)) {
             break;
@@ -384,7 +397,8 @@ mod tests {
     extern crate tempdir;
 
     use std::rc::Rc;
-    use crate::MutType;
+    use sinbad_rs::sinbad::SinBADInput;
+    use crate::{MutType, SinBADInput};
     use crate::DatasetGenInput;
     use crate::cfg::dataset::{build_dataset, calc_label};
     use crate::cfg::parse;
@@ -399,18 +413,27 @@ mod tests {
             directory");
     }
 
+    fn sinbad_input() -> SinBADInput {
+        let sin_cmd = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
+        let sin_backend = "dynamic1";
+        let sin_depth = 10;
+        let sin_duration: usize = 10;
+
+        SinBADInput::new(
+            sin_backend,
+            sin_depth,
+            sin_duration,
+        )
+    }
+
     #[test]
     fn test_build_dataset() {
         let cfg_path = "./grammars/lr1.y";
         let cfg_lex = "./grammars/general.lex";
 
         env_check();
-        let sin = sinbad_rs::sinbad()
-            .expect("Unable to create sinbad instance!");
-        let sin_backend = "dynamic1";
-        let sin_depth = 10;
-        let sin_duration: usize = 10;
-
+        let sin_input = sinbad_input();
         let td = tempdir::TempDir::new("cfg_ds")
             .expect("Unable to create a temporary directory");
         let data_dir = td.path();
@@ -428,10 +451,7 @@ mod tests {
         let ds_input = DatasetGenInput::new(
             cfg_path,
             cfg_lex,
-            &sin,
-            sin_backend,
-            sin_depth,
-            sin_duration,
+            &sin_input,
             data_dir,
             no_samples,
             max_mutations_per_cfg,
@@ -451,13 +471,7 @@ mod tests {
         let cfg_lex = "/home/krish/kv/labs/sinbad/bin/general.lex";
 
         env_check();
-        let sin = sinbad_rs::sinbad();
-
-        let sin = sinbad_rs::sinbad()
-            .expect("Unable to create sinbad instance!");
-        let sin_backend = "dynamic1";
-        let sin_depth = 10;
-        let sin_duration: usize = 10;
+        let sin_input = sinbad_input();
         let td = tempdir::TempDir::new("cfg_ds")
             .expect("Unable to create a temporary directory");
         let data_dir = td.path();
@@ -473,16 +487,11 @@ mod tests {
 
         let cfg = parse::parse(&cfg_path)
             .expect("Unable to parse the given cfg");
-
         let cfg_rc = Rc::new(cfg);
-
         let ds_input = DatasetGenInput::new(
             cfg_path,
             cfg_lex,
-            &sin,
-            sin_backend,
-            sin_depth,
-            sin_duration,
+            &sin_input,
             data_dir,
             no_samples,
             max_mutations_per_cfg,
@@ -490,8 +499,8 @@ mod tests {
             ds_label.to_owned(),
             max_iter,
         );
-        let label: usize = calc_label(cfg_rc, 0, &ds_input)
-            .expect("Unable to calculate amb/unamb label");
+        let label: usize = calc_label(cfg_rc, &sin_input, cfg_lex)
+            .expect("Unable to calculate ambiguous/unambiguous label");
 
         assert_eq!(label, 0);
     }
@@ -502,13 +511,7 @@ mod tests {
         let cfg_lex = "./grammars/general.lex";
 
         env_check();
-        let sin = sinbad_rs::sinbad();
-
-        let sin = sinbad_rs::sinbad()
-            .expect("Unable to create sinbad instance!");
-        let sin_backend = "dynamic1";
-        let sin_depth = 10;
-        let sin_duration: usize = 10;
+        let sin_input = sinbad_input();
         let td = tempdir::TempDir::new("cfg_ds")
             .expect("Unable to create a temporary directory");
         let data_dir = td.path();
@@ -524,16 +527,11 @@ mod tests {
 
         let cfg = parse::parse(&cfg_path)
             .expect("Unable to parse the given cfg");
-
         let cfg_rc = Rc::new(cfg);
-
         let ds_input = DatasetGenInput::new(
             cfg_path,
             cfg_lex,
-            &sin,
-            sin_backend,
-            sin_depth,
-            sin_duration,
+            &sin_input,
             data_dir,
             no_samples,
             max_mutations_per_cfg,
@@ -541,8 +539,8 @@ mod tests {
             ds_label.to_owned(),
             max_iter,
         );
-        let label: usize = calc_label(cfg_rc, 0, &ds_input)
-            .expect("Unable to calculate amb/unamb label");
+        let label: usize = calc_label(cfg_rc, &sin_input, cfg_lex)
+            .expect("Unable to calculate ambiguous/unambiguous label");
 
         assert_eq!(label, 1);
     }

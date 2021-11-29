@@ -8,7 +8,7 @@ use zip::ZipWriter;
 
 use crate::cfg::{CfgError, parse};
 use crate::cfg::dataset::{build_dataset, CfgDataSet, CfgData};
-use sinbad_rs::sinbad::SinBAD;
+use sinbad_rs::sinbad::{SinBAD, SinBADInput};
 use crate::cfg::graph::CfgGraph;
 use std::rc::Rc;
 
@@ -32,16 +32,12 @@ pub struct DatasetGenInput<'a, 'b, 'c, 'd, 'e> {
     cfg_path: &'a str,
     /// Path to Cfg lex
     cfg_lex: &'b str,
-    /// SinBAD instance to generate target label
+    /// SinBAD tool
     sin: &'c SinBAD,
-    /// SinBAD backend to apply
-    sin_backend: &'e str,
-    /// SinBAD threshold depth
-    sin_depth: usize,
-    /// SinBAD running time for each CFG
-    sin_duration: usize,
+    /// SinBAD parameters
+    sin_input: &'d SinBADInput,
     /// Data directory to save CFGs and zip file
-    data_dir: &'d Path,
+    data_dir: &'e Path,
     /// No of CFG samples to generate
     no_samples: usize,
     /// No of mutations allowed per CFG
@@ -51,35 +47,31 @@ pub struct DatasetGenInput<'a, 'b, 'c, 'd, 'e> {
     /// Label used to create zip file and sub directory within it
     ds_label: String,
     /// Maximum no of iterations allowed to generate dataset
-    max_iter: usize,
+    max_iterations: usize,
 }
 
 impl<'a, 'b, 'c, 'd, 'e> DatasetGenInput<'a, 'b, 'c, 'd, 'e> {
     pub fn new(cfg_path: &'a str,
                cfg_lex: &'b str,
                sin: &'c SinBAD,
-               sin_backend: &'e str,
-               sin_depth: usize,
-               sin_duration: usize,
-               data_dir: &'d Path,
+               sin_input: &'d SinBADInput,
+               data_dir: &'e Path,
                no_samples: usize,
                max_mutations_per_cfg: usize,
                mut_types: Vec<MutType>,
                ds_label: String,
-               max_iter: usize) -> Self {
+               max_iterations: usize) -> Self {
         Self {
             cfg_path,
             cfg_lex,
             sin,
-            sin_backend,
-            sin_depth,
-            sin_duration,
+            sin_input,
             data_dir,
             no_samples,
             max_mutations_per_cfg,
             mut_types,
             ds_label,
-            max_iter,
+            max_iterations,
         }
     }
 }
