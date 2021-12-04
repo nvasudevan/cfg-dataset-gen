@@ -286,16 +286,6 @@ fn calc_label(cfg: Rc<Cfg>, sin: &SinBAD, sin_input: &SinBADInput, lp: &str) -> 
             if sin_out.is_amb() {
                 return Ok(1);
             }
-            // match res {
-            //     Ok(sin_out) => {
-            //         if sin_out.is_amb() {
-            //             return Ok(1);
-            //         }
-            //     }
-            //     Err(e) => {
-            //         eprint!("error [{}] ({}){}", e.r_code.unwrap_or_else(|| -1), gp_prefix, e.to_string());
-            //     }
-            // }
 
             Ok(2)
         }
