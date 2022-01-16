@@ -388,7 +388,7 @@ mod tests {
 
     use std::rc::Rc;
     use sinbad_rs::sinbad::SinBADInput;
-    use crate::{MutType, SinBADInput};
+    use crate::{MutType};
     use crate::DatasetGenInput;
     use crate::cfg::dataset::{build_dataset, calc_label};
     use crate::cfg::parse;
@@ -423,6 +423,8 @@ mod tests {
         let cfg_lex = "./grammars/general.lex";
 
         env_check();
+        let sin = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
         let sin_input = sinbad_input();
         let td = tempdir::TempDir::new("cfg_ds")
             .expect("Unable to create a temporary directory");
@@ -436,18 +438,19 @@ mod tests {
             MutType::ReplaceTerm,
             MutType::DeleteTerm,
         ];
-        let max_iter = 100;
+        let max_iterations = 100;
 
         let ds_input = DatasetGenInput::new(
             cfg_path,
             cfg_lex,
+            &sin,
             &sin_input,
             data_dir,
             no_samples,
             max_mutations_per_cfg,
             mut_types,
             ds_label.to_owned(),
-            max_iter,
+            max_iterations,
         );
         let ds = build_dataset(&ds_input)
             .expect("Unable to build dataset from cfgs");
@@ -461,35 +464,13 @@ mod tests {
         let cfg_lex = "/home/krish/kv/labs/sinbad/bin/general.lex";
 
         env_check();
+        let sin = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
         let sin_input = sinbad_input();
-        let td = tempdir::TempDir::new("cfg_ds")
-            .expect("Unable to create a temporary directory");
-        let data_dir = td.path();
-        let ds_label = "CFG";
-        let no_samples: usize = 2;
-        let max_mutations_per_cfg: usize = 1;
-        let mut_types = vec![
-            MutType::InsertTerm,
-            MutType::ReplaceTerm,
-            MutType::DeleteTerm,
-        ];
-        let max_iter = 100;
-
         let cfg = parse::parse(&cfg_path)
             .expect("Unable to parse the given cfg");
         let cfg_rc = Rc::new(cfg);
-        let ds_input = DatasetGenInput::new(
-            cfg_path,
-            cfg_lex,
-            &sin_input,
-            data_dir,
-            no_samples,
-            max_mutations_per_cfg,
-            mut_types,
-            ds_label.to_owned(),
-            max_iter,
-        );
-        let label: usize = calc_label(cfg_rc, &sin_input, cfg_lex)
+        let label: usize = calc_label(cfg_rc, &sin, &sin_input, cfg_lex)
             .expect("Unable to calculate ambiguous/unambiguous label");
 
         assert_eq!(label, 0);
@@ -501,37 +482,27 @@ mod tests {
         let cfg_lex = "./grammars/general.lex";
 
         env_check();
+        let sin = sinbad_rs::sinbad()
+            .expect("Unable to create sinbad instance!");
         let sin_input = sinbad_input();
-        let td = tempdir::TempDir::new("cfg_ds")
-            .expect("Unable to create a temporary directory");
-        let data_dir = td.path();
-        let ds_label = "CFG";
-        let no_samples: usize = 2;
-        let max_mutations_per_cfg: usize = 1;
-        let mut_types = vec![
-            MutType::InsertTerm,
-            MutType::ReplaceTerm,
-            MutType::DeleteTerm,
-        ];
-        let max_iter = 100;
-
         let cfg = parse::parse(&cfg_path)
             .expect("Unable to parse the given cfg");
         let cfg_rc = Rc::new(cfg);
-        let ds_input = DatasetGenInput::new(
-            cfg_path,
-            cfg_lex,
-            &sin_input,
-            data_dir,
-            no_samples,
-            max_mutations_per_cfg,
-            mut_types,
-            ds_label.to_owned(),
-            max_iter,
-        );
-        let label: usize = calc_label(cfg_rc, &sin_input, cfg_lex)
+        let label: usize = calc_label(cfg_rc, &sin, &sin_input, cfg_lex)
             .expect("Unable to calculate ambiguous/unambiguous label");
 
         assert_eq!(label, 1);
+    }
+
+    #[test]
+    fn test_pl_parse() {
+        // let cfg_path = "./grammars/amb.y";
+        // let cfg_lex = "./grammars/general.lex";
+        let cfg_path = "./grammars/pl/test_pl.y";
+        let cfg_lex = "./grammars/pl/pl_lex.lex";
+
+        let cfg = parse::parse(&cfg_path)
+            .expect("Unable to parse the given cfg");
+
     }
 }
