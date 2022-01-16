@@ -23,25 +23,13 @@ class CFG(
         "CFG_graph_labels.txt",
         "README.txt",
     ],
-    description="Each graph represents a Context-Free Grammar and graph labels represent either a derivation, shifting of symbols or reduction of a rule."
-                "The dataset includes 80 graphs with 97 nodes and 117 edges on average for each graph."
-                "Graph nodes have a labels and each graph is labelled as belonging to 1 of 2 classes.",
-    source="http://localhost:8000/CFG.zip",
+    description="CFG defined as a graph",
+    source="http://cfg-dataset:8000/CFG.zip",
 ):
     _edge_labels_as_weights = False
     _node_attributes = False
 
     def load(self):
-        """
-        Load this dataset into a list of StellarGraph objects with corresponding labels, downloading it if required.
-
-        Note: Edges in CFG are labelled as one of 7 values: <eps>, a, c, r, s, u, and z indicated by integers
-        0, 1, 2, 3 ,4 ,5 and 6 respectively. The edge labels are included in the  :class:`.StellarGraph` objects as edge weights in
-        integer representation.
-
-        Returns:
-            A tuple that is a list of :class:`.StellarGraph` objects and a Pandas Series of labels one for each graph.
-        """
         return _load_graph_kernel_dataset(self)
 
 
