@@ -1,0 +1,11 @@
+%token TK_PQR, TK_XYZ;
+%nodefault
+
+root: pqr | xyz
+;
+
+pqr: TK_PQR '+' TK_PQR
+;
+
+xyz: TK_XYZ '-' TK_XYZ
+;
